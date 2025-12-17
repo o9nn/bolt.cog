@@ -1,0 +1,68 @@
+# Gitpod configuration for openbolt.new
+image:
+  file: .gitpod.Dockerfile
+
+# Configure VS Code extensions
+vscode:
+  extensions:
+    - bradlc.vscode-tailwindcss
+    - esbenp.prettier-vscode
+    - dbaeumer.vscode-eslint
+    - ms-vscode.vscode-typescript-next
+    - unifiedjs.vscode-mdx
+
+# Gitpod tasks
+tasks:
+  - name: Install dependencies
+    before: |
+      # Update to Node.js 20.15.1 and pnpm 9.4.0 as specified in .tool-versions
+      . ${HOME}/.nvm/nvm.sh
+      nvm install 20.15.1
+      nvm use 20.15.1
+      npm install -g pnpm@9.4.0
+    init: |
+      # Change to repository directory
+      cd openbolt.new
+      # Install project dependencies
+      pnpm install
+      # Create .env.local file if it doesn't exist
+      if [ ! -f .env.local ]; then
+        cp .env.local.example .env.local
+      fi
+    command: |
+      # Change to repository directory and start development server
+      cd openbolt.new
+      pnpm run dev
+
+# Configure ports
+ports:
+  - name: Dev Server
+    description: Remix development server
+    port: 5173
+    onOpen: open-browser
+    visibility: public
+  - name: Preview Server  
+    description: Preview server for production build
+    port: 8788
+    onOpen: notify
+    visibility: public
+
+# GitHub integration
+github:
+  prebuilds:
+    # Enable prebuilds for branches
+    master: true
+    branches: true
+    # Enable prebuilds for pull requests from forks
+    pullRequestsFromForks: true
+    # Add additional paths to watch for prebuild triggers
+    addCheck: true
+    addComment: false
+    addBadge: true
+    addLabel: false
+
+# Workspace configuration
+workspaceLocation: "."
+
+# Environment variables that might be needed
+# Add any required environment variables here when needed
