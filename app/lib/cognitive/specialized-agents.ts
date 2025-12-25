@@ -161,7 +161,7 @@ export class GrammarAgent extends BaseAgent implements IGrammarAgent {
   private async enhanceWithGrammar(content: string): Promise<string> {
     // apply cognitive grammar rules to enhance content
     const engine = await this.getCognitiveGrammarEngine();
-    const parsed = engine.parseInput(content, this._context);
+    const parsed = engine.parseInput(content, this.context);
 
     return engine.applyRules(parsed);
   }

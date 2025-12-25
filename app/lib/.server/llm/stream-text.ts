@@ -5,6 +5,7 @@ import { MAX_TOKENS } from './constants';
 import { getSystemPrompt } from './prompts';
 
 interface ToolResult<Name extends string, Args, Result> {
+  state: 'result';
   toolCallId: string;
   toolName: Name;
   args: Args;

@@ -124,7 +124,7 @@ export class CognitiveGrammarEngine implements GrammarEngine {
           tokens.push({
             type,
             value: match[0],
-            _position: start,
+            position: start,
             semanticRole: this.getSemanticRole(match[0], type),
           });
 

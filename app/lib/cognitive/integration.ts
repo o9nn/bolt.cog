@@ -146,7 +146,7 @@ class CognitiveAgentIntegration {
       type,
       content,
       confidence: 0.8,
-      _context: ['user_interaction'],
+      context: ['user_interaction'],
       source: 'bolt_system',
     });
   }
@@ -154,7 +154,7 @@ class CognitiveAgentIntegration {
   async queryContext(question: string): Promise<string> {
     await this.initialize();
 
-    const contextAgents = agentNetworkCoordinator.getAgentsByType('_context');
+    const contextAgents = agentNetworkCoordinator.getAgentsByType('context');
 
     if (contextAgents.length > 0) {
       const contextAgent = contextAgents[0] as any; // type assertion for specialized methods
