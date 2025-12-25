@@ -28,6 +28,10 @@ export interface ErrorContext {
   action?: string;
   component?: string;
   metadata?: Record<string, unknown>;
+  messageId?: string;
+  targetAgent?: string;
+  taskId?: string;
+  agentId?: string;
 }
 
 export interface EnhancedError {
