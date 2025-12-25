@@ -5,5 +5,6 @@ export function getAnthropicModel(apiKey: string) {
     apiKey,
   });
 
-  return anthropic('claude-3-5-sonnet-20240620');
+  // Use claude-3-haiku-20240307 - fast and efficient model
+  return anthropic('claude-3-haiku-20240307');
 }

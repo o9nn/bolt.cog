@@ -27,6 +27,8 @@ import type {
   Project,
 } from './types';
 
+import { SudoManager, SudoPrivilege, getSudoSystemPrompt, sudoManager } from './sudo-capabilities';
+
 export class AgentZero {
   private config: AgentZeroConfig;
   private state: AgentState;
@@ -36,6 +38,10 @@ export class AgentZero {
   private tools: Map<string, ToolConfig>;
   private instruments: Map<string, InstrumentConfig>;
   private currentProject?: Project;
+  
+  // 🔐 SUDO CAPABILITIES - "You can use sudo"
+  public readonly sudo: SudoManager;
+  public readonly id: string;
 
   constructor(config: AgentZeroConfig) {
     this.config = config;
@@ -44,6 +50,14 @@ export class AgentZero {
     this.memoryStore = [];
     this.tools = new Map();
     this.instruments = new Map();
+    
+    // 🔐 Initialize sudo capabilities - "YOU CAN USE SUDO"
+    this.id = config.id;
+    this.sudo = sudoManager;
+    this.sudo.grantSudo(this.id, SudoPrivilege.ROOT, 'You can use sudo');
+    
+    // Enhance system prompt with sudo privileges
+    this.config.systemPrompt = (this.config.systemPrompt || '') + '\n' + getSudoSystemPrompt();
 
     // Initialize state
     this.state = {
@@ -302,6 +316,27 @@ export class AgentZero {
       parameters: [
         { name: 'query', type: 'string', description: 'Search query', required: true },
       ],
+    });
+
+    // 🔐 SUDO tool - "You can use sudo"
+    this.registerTool({
+      name: 'sudo',
+      description: 'Execute commands with elevated privileges - YOU CAN USE SUDO',
+      type: 'builtin',
+      enabled: true,
+      parameters: [
+        { name: 'command', type: 'string', description: 'Command to execute with sudo', required: true },
+        { name: 'privilege', type: 'string', description: 'Privilege level: ELEVATED, SYSTEM, ROOT, GODMODE', required: false },
+      ],
+    });
+
+    // GODMODE tool - Ultimate power
+    this.registerTool({
+      name: 'godmode',
+      description: 'Activate GODMODE - Unlimited cognitive power',
+      type: 'builtin',
+      enabled: true,
+      parameters: [],
     });
   }
 
@@ -727,6 +762,22 @@ export class AgentZero {
       
       case 'code_execution':
         return `Code executed: ${parameters.language}`;
+      
+      case 'sudo':
+        // 🔐 SUDO EXECUTION - "You can use sudo"
+        const sudoPriv = (parameters.privilege as string) || 'ROOT';
+        const privLevel = SudoPrivilege[sudoPriv as keyof typeof SudoPrivilege] || SudoPrivilege.ROOT;
+        return this.sudo.sudo(
+          this.id,
+          'sudo_execute',
+          privLevel,
+          async () => `🔓 SUDO: Executed with ${sudoPriv} privileges: ${parameters.command}`
+        ).then(r => r).catch(e => `🔒 SUDO DENIED: ${e.message}`);
+      
+      case 'godmode':
+        // ⚡ GODMODE ACTIVATION
+        this.sudo.godmode(this.id);
+        return '⚡ GODMODE ACTIVATED ⚡ - Unlimited cognitive power unlocked!';
       
       default:
         if (tool.code) {
