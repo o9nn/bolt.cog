@@ -1,5 +1,25 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "bolt"
+name = "bolt-cog"
 compatibility_flags = ["nodejs_compat"]
 compatibility_date = "2024-07-01"
 pages_build_output_dir = "./build/client"
+
+[vars]
+ENVIRONMENT = "production"
+
+# Uncomment and configure as needed:
+# [[kv_namespaces]]
+# binding = "BOLT_KV"
+# id = "your-kv-namespace-id"
+
+# [[d1_databases]]
+# binding = "BOLT_DB"
+# database_name = "bolt-cog-db"
+# database_id = "your-d1-database-id"
+
+# [[r2_buckets]]
+# binding = "BOLT_STORAGE"
+# bucket_name = "bolt-cog-storage"
+
+# [ai]
+# binding = "AI"
