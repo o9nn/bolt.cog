@@ -1,0 +1,9 @@
+{
+  "appUrl": "https://bolt-cog.pages.dev/",
+  "authOrigins": [
+    "https://rzo.cloudflareaccess.com",
+    "https://dash.cloudflare.com",
+    "https://login.microsoftonline.com",
+    "https://accounts.google.com"
+  ]
+}

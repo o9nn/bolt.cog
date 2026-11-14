@@ -1,0 +1,101 @@
+{
+  "name": "bolt-cog-desktop",
+  "productName": "Bolt Cog Desktop",
+  "version": "0.1.1",
+  "description": "Sandboxed Electron desktop client for the Bolt Cog Cloudflare application",
+  "author": "o9nn",
+  "license": "MIT",
+  "private": true,
+  "homepage": "https://github.com/o9nn/bolt.cog",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/o9nn/bolt.cog.git"
+  },
+  "main": "main.cjs",
+  "packageManager": "pnpm@9.4.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.cjs",
+    "smoke": "node scripts/smoke.cjs",
+    "check-version": "node scripts/check-version.cjs",
+    "pack": "electron-builder --dir --publish never",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "org.o9nn.boltcog",
+    "productName": "Bolt Cog Desktop",
+    "executableName": "bolt-cog-desktop",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.cjs",
+      "policy.cjs",
+      "smoke-runtime.cjs",
+      "app.config.json",
+      "offline.html",
+      "assets/icon.png",
+      "package.json"
+    ],
+    "artifactName": "BoltCog-Desktop-${version}-${os}-${arch}.${ext}",
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "assets/icon.png",
+      "maintainer": "o9nn"
+    },
+    "deb": {
+      "depends": [
+        "libnss3",
+        "libgtk-3-0",
+        "libgbm1",
+        "libasound2",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "BoltCog-Desktop-${version}-win-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "BoltCog-Desktop-${version}-win-${arch}-portable.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    },
+    "publish": null
+  }
+}
