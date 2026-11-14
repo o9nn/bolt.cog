@@ -1,7 +1,7 @@
 {
   "name": "bolt-cog-desktop",
   "productName": "Bolt Cog Desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sandboxed Electron desktop client for the Bolt Cog Cloudflare application",
   "author": "o9nn",
   "license": "MIT",

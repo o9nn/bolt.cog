@@ -40,7 +40,7 @@ jobs:
             platform: linux
             arch: x64
             extensions: AppImage,deb
-          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-arm
             platform: linux
             arch: arm64
             extensions: AppImage,deb
@@ -48,11 +48,11 @@ jobs:
             platform: win
             arch: x64
             extensions: exe
-          - runner: macos-14
+          - runner: macos-15-intel
             platform: mac
             arch: x64
             extensions: dmg,zip
-          - runner: macos-14
+          - runner: macos-15
             platform: mac
             arch: arm64
             extensions: dmg,zip
@@ -141,19 +141,27 @@ jobs:
             "--${BUILD_PLATFORM}" "--${BUILD_ARCH}" --publish never
 
       - name: Configure packaged Linux sandbox helper
-        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        if: matrix.platform == 'linux'
+        env:
+          BUILD_ARCH: ${{ matrix.arch }}
         run: |
           # Only this ephemeral runner's packaged helper gets setuid ownership.
-          helper="$PWD/desktop/dist/linux-unpacked/chrome-sandbox"
+          directory=linux-unpacked
+          if [ "$BUILD_ARCH" = arm64 ]; then directory=linux-arm64-unpacked; fi
+          helper="$PWD/desktop/dist/$directory/chrome-sandbox"
           test -f "$helper" && test ! -L "$helper"
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
           test "$(stat -c '%U:%G:%a' "$helper")" = 'root:root:4755'
 
-      - name: Smoke test the real packaged Linux x64 application
-        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+      - name: Smoke test the real packaged Linux application
+        if: matrix.platform == 'linux'
+        env:
+          BUILD_ARCH: ${{ matrix.arch }}
         run: |
-          export BOLT_DESKTOP_SMOKE_BINARY="$PWD/desktop/dist/linux-unpacked/bolt-cog-desktop"
+          directory=linux-unpacked
+          if [ "$BUILD_ARCH" = arm64 ]; then directory=linux-arm64-unpacked; fi
+          export BOLT_DESKTOP_SMOKE_BINARY="$PWD/desktop/dist/$directory/bolt-cog-desktop"
           test -x "$BOLT_DESKTOP_SMOKE_BINARY"
           xvfb-run -a --server-args='-screen 0 1280x800x24' pnpm --dir desktop smoke
 
