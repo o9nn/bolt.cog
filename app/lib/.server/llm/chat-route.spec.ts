@@ -3,9 +3,9 @@ import { formatStreamPart, parseStreamPart } from 'ai';
 import type { ActionFunctionArgs } from '@remix-run/cloudflare';
 import { CHAT_BODY_LIMIT, guardChatStream } from '~/lib/.server/llm/chat-stream';
 
-const mocks = vi.hoisted(() => ({ stream: vi.fn(), hasKey: vi.fn(), auth: vi.fn(), tools: vi.fn() }));
+const mocks = vi.hoisted(() => ({ stream: vi.fn(), hasKey: vi.fn(), config: vi.fn(), auth: vi.fn(), tools: vi.fn() }));
 vi.mock('~/lib/.server/llm/stream-text', () => ({ streamText: mocks.stream }));
-vi.mock('~/lib/.server/llm/api-key', () => ({ hasAPIKey: mocks.hasKey }));
+vi.mock('~/lib/.server/llm/api-key', () => ({ hasAPIKey: mocks.hasKey, getLLMConfig: mocks.config }));
 vi.mock('~/lib/.server/agent-zero-tools', () => ({
   authorizeWorkspace: mocks.auth,
   createAgentZeroTools: mocks.tools,
@@ -43,6 +43,7 @@ const valid = { messages: [{ role: 'user', content: 'Hello' }] };
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.hasKey.mockReturnValue(true);
+  mocks.config.mockReturnValue({ provider: 'anthropic', model: 'claude-3-haiku-20240307', apiKey: 'fixture' });
   mocks.stream.mockResolvedValue({ toDataStream: () => source(['0:"Hello"\n', 'd:{"finishReason":"stop"}\n']) });
 });
 
@@ -184,5 +185,72 @@ describe('guardChatStream', () => {
     await reader.cancel();
     expect(await reading).toEqual({ done: true, value: undefined });
     expect(g.cleanup).toHaveBeenCalledOnce();
+  });
+});
+
+describe('local provider initialization receipts', () => {
+  it('records a safe Anthropic400 billing category and preserves the client request id', async () => {
+    mocks.stream.mockRejectedValue({
+      statusCode: 400,
+      data: { error: { type: 'invalid_request_error', message: 'Your credit balance is too low SECRET_API_KEY' } },
+      responseHeaders: { 'request-id': 'req_fixture' },
+    });
+
+    const requestArgs = args(valid);
+    const recordDiagnostic = vi.fn().mockResolvedValue(undefined);
+    requestArgs.context.desktop = { workspaceId: 'desktop', createTools: mocks.tools, recordDiagnostic };
+
+    const response = await action(requestArgs);
+    const text = await response.text();
+    expect(response.status).toBe(503);
+    expect(text).toContain('PROVIDER_BILLING');
+    expect(text).not.toContain('SECRET');
+    expect(recordDiagnostic).toHaveBeenCalledOnce();
+    expect(recordDiagnostic.mock.calls[0][0]).toMatchObject({
+      requestId: response.headers.get('X-Request-ID'),
+      phase: 'initialization',
+      failure: { code: 'PROVIDER_BILLING', upstreamStatus: 400, upstreamRequestId: 'req_fixture' },
+    });
+    expect(JSON.stringify(recordDiagnostic.mock.calls)).not.toContain('SECRET');
+  });
+  it('does not relabel an ordinary transport failure as timeout after cleanup cancellation', async () => {
+    mocks.stream.mockRejectedValue(
+      new TypeError('fetch failed', { cause: Object.assign(new Error('PRIVATE'), { code: 'ENOTFOUND' }) }),
+    );
+
+    const response = await action(args(valid));
+    expect(await response.text()).toContain('PROVIDER_CONNECTION');
+  });
+  it('handles actual upstream abort as timeout', async () => {
+    mocks.stream.mockRejectedValue(new DOMException('private', 'AbortError'));
+
+    const response = await action(args(valid));
+    expect(response.status).toBe(504);
+    expect(await response.text()).toContain('PROVIDER_TIMEOUT');
+  });
+});
+
+describe('Opus5.5 signed-thinking safety gate', () => {
+  it('runs a single real-provider text step without assistant-prefill continuation', async () => {
+    mocks.config.mockReturnValue({ provider: 'anthropic', model: 'claude-opus-5-5', apiKey: 'fixture' });
+
+    const response = await action(args(valid));
+    expect(response.status).toBe(200);
+    expect(mocks.stream.mock.calls[0][2]).toMatchObject({
+      maxSteps: 1,
+      maxTokens: 16384,
+      experimental_continueSteps: false,
+      toolChoice: 'none',
+    });
+    await response.text();
+  });
+  it('denies native tools before dispatch rather than dropping signed context silently', async () => {
+    mocks.config.mockReturnValue({ provider: 'anthropic', model: 'claude-opus-5-5', apiKey: 'fixture' });
+
+    const response = await action(args({ ...valid, execution: { backend: 'desktop', workspaceId: 'desktop' } }));
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('signed-thinking');
+    expect(mocks.tools).not.toHaveBeenCalled();
+    expect(mocks.stream).not.toHaveBeenCalled();
   });
 });

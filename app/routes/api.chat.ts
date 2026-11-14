@@ -4,7 +4,9 @@ import { createAgentZeroTools, authorizeWorkspace } from '~/lib/.server/agent-ze
 import { MAX_RESPONSE_SEGMENTS } from '~/lib/.server/llm/constants';
 import { getSystemPrompt } from '~/lib/.server/llm/prompts';
 import { streamText } from '~/lib/.server/llm/stream-text';
-import { hasAPIKey } from '~/lib/.server/llm/api-key';
+import { classifyProviderFailure } from '~/lib/.server/llm/provider-errors';
+import { hasAPIKey, getLLMConfig } from '~/lib/.server/llm/api-key';
+import { requiresModernAnthropicTextAdapter } from '~/lib/.server/llm/anthropic-compat';
 import {
   ChatRequestError,
   chatErrorResponse,
@@ -44,7 +46,7 @@ export async function action({ context, request }: ActionFunctionArgs): Promise<
 
   const abort = new AbortController();
   const cancel = () => abort.abort();
-  const timer = setTimeout(cancel, 90_000);
+  let timer = setTimeout(cancel, 90_000);
   request.signal.addEventListener('abort', cancel, { once: true });
 
   if (request.signal.aborted) {
@@ -68,6 +70,21 @@ export async function action({ context, request }: ActionFunctionArgs): Promise<
 
     if (!hasAPIKey(env)) {
       throw new ChatRequestError(503, 'Chat provider is not configured');
+    }
+
+    const provider = getLLMConfig(env);
+    const modernTextOnly = provider.provider === 'anthropic' && requiresModernAnthropicTextAdapter(provider.model);
+
+    if (modernTextOnly) {
+      clearTimeout(timer);
+      timer = setTimeout(cancel, 300_000);
+    }
+
+    if (modernTextOnly && execution) {
+      throw new ChatRequestError(
+        400,
+        'Opus 5.5 text chat is supported, but native tool loops require signed-thinking preservation. Turn local Agent-Zero tools off; no native tool was run.',
+      );
     }
 
     let toolContext: ReturnType<typeof createAgentZeroTools> | undefined;
@@ -96,15 +113,21 @@ export async function action({ context, request }: ActionFunctionArgs): Promise<
       }`,
       tools: toolContext?.tools,
       toolChoice: toolContext ? 'auto' : 'none',
-      maxSteps: toolContext ? 5 : MAX_RESPONSE_SEGMENTS,
-      experimental_continueSteps: true,
+      ...(modernTextOnly ? { maxTokens: 16_384 } : {}),
+      maxSteps: modernTextOnly ? 1 : toolContext ? 5 : MAX_RESPONSE_SEGMENTS,
+      experimental_continueSteps: !modernTextOnly,
       maxRetries: 0,
       abortSignal: abort.signal,
     });
 
     // SDK owns tool roundtrips and continuation; no onFinish cancellation or recursive shared readers
     const source = result.toDataStream({
-      getErrorMessage: () => `Chat provider failed [request ${requestId}]`,
+      getErrorMessage: (error) => {
+        const failure = classifyProviderFailure(error, abort.signal.aborted);
+        void context.desktop?.recordDiagnostic?.({ requestId, phase: 'stream', failure }).catch(() => undefined);
+
+        return `${failure.message} [${failure.code}; request ${requestId}]`;
+      },
       sendUsage: true,
     });
 
@@ -113,6 +136,7 @@ export async function action({ context, request }: ActionFunctionArgs): Promise<
       headers: chatHeaders(requestId),
     });
   } catch (error) {
+    const providerAborted = abort.signal.aborted;
     cancel();
     cleanup();
 
@@ -121,26 +145,10 @@ export async function action({ context, request }: ActionFunctionArgs): Promise<
       return chatErrorResponse(error.status, error.message, requestId);
     }
 
-    const providerStatus =
-      typeof error === 'object' && error !== null && 'statusCode' in error ? error.statusCode : undefined;
+    const failure = classifyProviderFailure(error, providerAborted);
+    await context.desktop?.recordDiagnostic?.({ requestId, phase: 'initialization', failure }).catch(() => undefined);
 
-    if (providerStatus === 401 || providerStatus === 403) {
-      return chatErrorResponse(
-        503,
-        'Chat provider credentials were rejected; update the server configuration',
-        requestId,
-      );
-    }
-
-    if (providerStatus === 404) {
-      return chatErrorResponse(503, 'Configured chat model is unavailable for this account', requestId);
-    }
-
-    if (providerStatus === 429) {
-      return chatErrorResponse(429, 'Chat provider rate limit reached; retry later', requestId);
-    }
-
-    return chatErrorResponse(502, 'Chat initialization failed', requestId);
+    return chatErrorResponse(failure.status, `${failure.message} [${failure.code}]`, requestId);
   }
 }
 

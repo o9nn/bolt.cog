@@ -1,9 +1,13 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { DEFAULT_ANTHROPIC_MODEL, getLLMConfig } from './api-key';
+import { modernAnthropicTextFetch, requiresModernAnthropicTextAdapter } from './anthropic-compat';
 
 export function getAnthropicModel(apiKey: string, modelId = DEFAULT_ANTHROPIC_MODEL) {
-  return createAnthropic({ apiKey })(modelId);
+  return createAnthropic({
+    apiKey,
+    ...(requiresModernAnthropicTextAdapter(modelId) ? { fetch: modernAnthropicTextFetch() } : {}),
+  })(modelId);
 }
 
 export function getModel(serverEnv: Env) {
