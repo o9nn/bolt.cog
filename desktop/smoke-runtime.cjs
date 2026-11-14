@@ -8,7 +8,7 @@ const { isTrustedNavigation } = require('./policy.cjs');
 module.exports = function runSmoke(window, config, offlinePath) {
   let started = false;
   const fail = (error) => { console.error('ELECTRON_SMOKE_FAILED', error?.message || 'unknown'); app.exit(1); };
-  const watchdog = setTimeout(fail, 100_000);
+  const watchdog = setTimeout(() => fail(new Error('Smoke deadline exceeded')), process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1' ? 330_000 : 100_000);
   const remoteAppRequests = [];
   const browserErrors = [];
   window.webContents.session.webRequest.onErrorOccurred((details) => {
@@ -46,6 +46,8 @@ module.exports = function runSmoke(window, config, offlinePath) {
         assert.equal(webcontainer.commandExitCode, 0); assert.equal(webcontainer.previewText, 'BOLT_REAL_PREVIEW');
       }
       let chat;
+      let terminal;
+      if (process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1') terminal = await require('./terminal-smoke.cjs')(window, process.env.BOLT_DESKTOP_SMOKE_OUTPUT);
       if (process.env.BOLT_DESKTOP_SMOKE_CHAT === '1') {
         const payload = { messages: [{ role: 'user', content: 'Write a Python function sum_even(numbers) that returns the sum of even integers. Return only the function code, no XML or prose.' }] };
         chat = await window.webContents.executeJavaScript(`fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify(payload)})}).then(async r=>({status:r.status,body:await r.text()}))`);
@@ -61,8 +63,11 @@ module.exports = function runSmoke(window, config, offlinePath) {
         fs.writeFileSync(path.join(outputDir, 'browser-errors.json'), JSON.stringify(browserErrors, null, 2));
         if (chat) fs.writeFileSync(path.join(outputDir, 'real-local-chat.sse'), chat.body);
       }
+      const lastTrustedURL = window.webContents.getURL();
+      assert.ok(isTrustedNavigation(lastTrustedURL, config));
+      assert.equal(new URL(lastTrustedURL).origin, new URL(url).origin);
       window.webContents.executeJavaScript('window.location.assign("https://untrusted-desktop-test.invalid/")').catch(() => {});
-      await new Promise((resolve) => setTimeout(resolve, 350)); assert.equal(window.webContents.getURL(), url);
+      await new Promise((resolve) => setTimeout(resolve, 350)); assert.equal(window.webContents.getURL(), lastTrustedURL);
       await window.loadFile(offlinePath);
       assert.equal(await window.webContents.executeJavaScript('document.title'), 'Bolt Cog — connection unavailable');
       assert.equal(await window.webContents.executeJavaScript('typeof process'), 'undefined');
@@ -74,9 +79,16 @@ module.exports = function runSmoke(window, config, offlinePath) {
         contextIsolation: prefs.contextIsolation, webSecurity: prefs.webSecurity, localLoaded: true,
         loadedOrigin: new URL(url).origin, crossOriginIsolated: isolation.crossOriginIsolated,
         webcontainer,
+        terminal: terminal ? { passed: terminal.passed, cases: terminal.cases.map((test) => test.name) } : undefined,
         provider: info.provider, providerConfigured: info.providerConfigured, realChatStream: Boolean(chat),
         cloudflareAppRequests: remoteAppRequests.length, blockedFilePopup: denied, blockedUntrustedNavigation: true, offlinePageVerified: true }));
       app.exit(0);
-    } catch (error) { clearTimeout(watchdog); fail(error); }
+    } catch (error) {
+      if (process.env.BOLT_DESKTOP_SMOKE_OUTPUT) {
+        fs.mkdirSync(process.env.BOLT_DESKTOP_SMOKE_OUTPUT, { recursive: true });
+        fs.writeFileSync(path.join(process.env.BOLT_DESKTOP_SMOKE_OUTPUT, 'browser-errors.json'), JSON.stringify(browserErrors, null, 2));
+      }
+      clearTimeout(watchdog); fail(error);
+    }
   });
 };

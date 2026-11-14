@@ -8,6 +8,7 @@ import { useMessageParser, usePromptEnhancer, useShortcuts, useSnapScroll } from
 import { useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
+import { terminalDiagnosticEnabled, installTerminalDiagnostic } from '~/lib/runtime/desktop-terminal-diagnostic';
 import { fileModificationsToHTML } from '~/utils/diff';
 import { cubicEasingFn } from '~/utils/easings';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
@@ -74,12 +75,18 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
   const { showChat } = useStore(chatStore);
   const [localRuntime, setLocalRuntime] = useState(false);
   const [localTools, setLocalTools] = useState(false);
+  const [nativeToolsSupported, setNativeToolsSupported] = useState(false);
+  const terminalReceiptCursor = useRef(0);
+  const [chatFailure, setChatFailure] = useState<string | undefined>();
 
   const [animationScope, animate] = useAnimate();
 
   const { messages, isLoading, input, handleInputChange, setInput, stop, append } = useChat({
     api: '/api/chat',
-    body: localRuntime && localTools ? { execution: { backend: 'desktop', workspaceId: 'desktop' } } : {},
+    body:
+      localRuntime && localTools && nativeToolsSupported
+        ? { execution: { backend: 'desktop', workspaceId: 'desktop' } }
+        : {},
     onError: (error) => {
       logger.error('Request failed\n\n', error);
 
@@ -97,6 +104,7 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
         }
       }
 
+      setChatFailure(message);
       toast.error(message);
     },
     onFinish: () => {
@@ -108,6 +116,16 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
   const { enhancingPrompt, promptEnhanced, enhancePrompt, resetEnhancer } = usePromptEnhancer();
   const { parsedMessages, parseMessages } = useMessageParser();
 
+  useEffect(() => {
+    installTerminalDiagnostic();
+  }, []);
+
+  useEffect(() => {
+    if (terminalDiagnosticEnabled()) {
+      (window as any).__boltChatQA = { messages, isLoading, nativeToolsSupported, localTools, error: chatFailure };
+    }
+  }, [messages, isLoading, nativeToolsSupported, localTools, chatFailure]);
+
   const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
 
   useEffect(() => {
@@ -117,9 +135,11 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
 
     fetch('/api/desktop/info')
       .then((response) => (response.ok ? response.json() : undefined))
-      .then((info) =>
-        setLocalRuntime(typeof info === 'object' && info !== null && 'runtime' in info && info.runtime === 'desktop'),
-      )
+      .then((info) => {
+        const desktop = typeof info === 'object' && info !== null && 'runtime' in info && info.runtime === 'desktop';
+        setLocalRuntime(desktop);
+        setNativeToolsSupported(desktop && 'nativeToolsSupported' in info && info.nativeToolsSupported === true);
+      })
       .catch(() => setLocalRuntime(false));
   }, []);
 
@@ -194,8 +214,11 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
     await workbenchStore.saveAllFiles();
 
     const fileModifications = workbenchStore.getFileModifcations();
+    const terminalFeedback = workbenchStore.getTerminalFeedback(terminalReceiptCursor.current);
+    terminalReceiptCursor.current = terminalFeedback.lastSequence;
 
     chatStore.setKey('aborted', false);
+    setChatFailure(undefined);
 
     runAnimation();
 
@@ -209,7 +232,7 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
        * manually reset the input and we'd have to manually pass in file attachments. However, those
        * aren't relevant here.
        */
-      append({ role: 'user', content: `${diff}\n\n${_input}` });
+      append({ role: 'user', content: `${diff}\n\n${terminalFeedback.context}${_input}` });
 
       /**
        * After sending a new message we reset all modifications since the model
@@ -217,7 +240,7 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
        */
       workbenchStore.resetAllFileModifications();
     } else {
-      append({ role: 'user', content: _input });
+      append({ role: 'user', content: `${terminalFeedback.context}${_input}` });
     }
 
     setInput('');
@@ -236,10 +259,16 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
           <input
             type="checkbox"
             checked={localTools}
-            disabled={isLoading}
+            disabled={isLoading || !nativeToolsSupported}
             onChange={(event) => setLocalTools(event.target.checked)}
           />{' '}
           Local read-only Agent-Zero tools
+          {!nativeToolsSupported && (
+            <span title="The selected model's native tool loop is unavailable; closed shell actions still run in the built-in WebContainer terminal">
+              {' '}
+              — built-in terminal available
+            </span>
+          )}
         </label>
       )}
       <BaseChat

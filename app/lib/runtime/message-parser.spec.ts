@@ -205,3 +205,42 @@ function runTest(input: string | string[], outputOrExpectedResult: string | Expe
 
   expect(result).toEqual(expected.output);
 }
+
+describe('terminal action completion contract', () => {
+  it('emits explicit background/port only after the complete shell closing tag', () => {
+    const close = vi.fn();
+    const parser = new StreamingMessageParser({ callbacks: { onActionClose: close } });
+    let input =
+      '<boltArtifact id="server" title="Server"><boltAction type="shell" background="true" port="5173">node server.cjs';
+    parser.parse('server-message', input);
+    expect(close).not.toHaveBeenCalled();
+    input += '</boltAct';
+    parser.parse('server-message', input);
+    expect(close).not.toHaveBeenCalled();
+    input += 'ion></boltArtifact>';
+    parser.parse('server-message', input);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close.mock.calls[0][0].action).toEqual({
+      type: 'shell',
+      content: 'node server.cjs',
+      background: true,
+      port: 5173,
+    });
+  });
+  it('does not turn Markdown commands into executable actions', () => {
+    const close = vi.fn();
+    const parser = new StreamingMessageParser({ callbacks: { onActionClose: close } });
+    parser.parse('prose', 'Run `node -v` or ```shell\nnode -v\n```');
+    expect(close).not.toHaveBeenCalled();
+  });
+});
+
+it('allocates distinct action IDs even when the opening callback is absent', () => {
+  const ids: string[] = [];
+  const parser = new StreamingMessageParser({ callbacks: { onActionClose: (action) => ids.push(action.actionId) } });
+  parser.parse(
+    'close-only',
+    '<boltArtifact id="ids" title="Distinct IDs"><boltAction type="shell">echo first</boltAction><boltAction type="shell">echo second</boltAction><boltAction type="shell">echo third</boltAction></boltArtifact>',
+  );
+  expect(ids).toEqual(['0', '1', '2']);
+});

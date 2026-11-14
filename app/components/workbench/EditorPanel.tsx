@@ -60,13 +60,21 @@ export const EditorPanel = memo(
 
     const theme = useStore(themeStore);
     const showTerminal = useStore(workbenchStore.showTerminal);
+    const assistantActivity = useStore(workbenchStore.assistantActivity);
+    const hasRunningActions = useStore(workbenchStore.hasRunningActions);
 
     const terminalRefs = useRef<Array<TerminalRef | null>>([]);
     const terminalPanelRef = useRef<ImperativePanelHandle>(null);
     const terminalToggledByShortcut = useRef(false);
 
-    const [activeTerminal, setActiveTerminal] = useState(0);
+    const [activeTerminal, setActiveTerminal] = useState(-1);
     const [terminalCount, setTerminalCount] = useState(1);
+
+    useEffect(() => {
+      if (assistantActivity) {
+        setActiveTerminal(-1);
+      }
+    }, [assistantActivity]);
 
     const activeFileSegments = useMemo(() => {
       if (!editorDocument) {
@@ -199,6 +207,17 @@ export const EditorPanel = memo(
           <div className="h-full">
             <div className="bg-bolt-elements-terminals-background h-full flex flex-col">
               <div className="flex items-center bg-bolt-elements-background-depth-2 border-y border-bolt-elements-borderColor gap-1.5 min-h-[34px] p-2">
+                <button
+                  data-testid="assistant-terminal-tab"
+                  className={classNames('text-sm px-3 py-2 rounded-full', {
+                    'bg-bolt-elements-terminals-buttonBackground text-bolt-elements-textPrimary': activeTerminal === -1,
+                    'text-bolt-elements-textSecondary': activeTerminal !== -1,
+                  })}
+                  onClick={() => setActiveTerminal(-1)}
+                  title="Actual AI command output in the WebContainer workspace; not a native host shell"
+                >
+                  Assistant
+                </button>
                 {Array.from({ length: terminalCount }, (_, index) => {
                   const isActive = activeTerminal === index;
 
@@ -213,6 +232,7 @@ export const EditorPanel = memo(
                             !isActive,
                         },
                       )}
+                      data-testid={`interactive-terminal-tab-${index}`}
                       onClick={() => setActiveTerminal(index)}
                     >
                       <div className="i-ph:terminal-window-duotone text-lg" />
@@ -221,6 +241,16 @@ export const EditorPanel = memo(
                   );
                 })}
                 {terminalCount < MAX_TERMINALS && <IconButton icon="i-ph:plus" size="md" onClick={addTerminal} />}
+                {hasRunningActions && (
+                  <button
+                    data-testid="stop-assistant-processes"
+                    className="text-xs px-2 text-bolt-elements-textSecondary"
+                    onClick={() => workbenchStore.abortAllActions()}
+                    title="Stop owned assistant commands and preview processes"
+                  >
+                    Stop
+                  </button>
+                )}
                 <IconButton
                   className="ml-auto"
                   icon="i-ph:caret-down"
@@ -229,6 +259,15 @@ export const EditorPanel = memo(
                   onClick={() => workbenchStore.toggleTerminal(false)}
                 />
               </div>
+              <Terminal
+                readonly
+                className={classNames('h-full overflow-hidden', { hidden: activeTerminal !== -1 })}
+                ref={(ref) => {
+                  terminalRefs.current[0] = ref;
+                }}
+                onTerminalReady={(terminal) => workbenchStore.attachAssistantTerminal(terminal)}
+                theme={theme}
+              />
               {Array.from({ length: terminalCount }, (_, index) => {
                 const isActive = activeTerminal === index;
 
@@ -239,10 +278,10 @@ export const EditorPanel = memo(
                       hidden: !isActive,
                     })}
                     ref={(ref) => {
-                      terminalRefs.current.push(ref);
+                      terminalRefs.current[index + 1] = ref;
                     }}
                     onTerminalReady={(terminal) => workbenchStore.attachTerminal(terminal)}
-                    onTerminalResize={(cols, rows) => workbenchStore.onTerminalResize(cols, rows)}
+                    onTerminalResize={(cols, rows, terminal) => workbenchStore.onTerminalResize(cols, rows, terminal)}
                     theme={theme}
                   />
                 );

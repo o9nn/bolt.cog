@@ -156,6 +156,8 @@ const ActionList = memo(({ actions }: ActionListProps) => {
                     <div className="i-ph:circle-duotone"></div>
                   ) : status === 'complete' ? (
                     <div className="i-ph:check"></div>
+                  ) : status === 'started' ? (
+                    <div className="i-ph:broadcast"></div>
                   ) : status === 'failed' || status === 'aborted' ? (
                     <div className="i-ph:x"></div>
                   ) : null}
@@ -181,6 +183,17 @@ const ActionList = memo(({ actions }: ActionListProps) => {
                   code={content}
                 />
               )}
+              {type === 'shell' && (
+                <div
+                  className="text-xs text-bolt-elements-textSecondary whitespace-pre-wrap"
+                  data-testid="shell-action-result"
+                >
+                  {status === 'started' ? 'Preview server started; process remains running' : `Status: ${status}`}
+                  {action.exitCode !== undefined ? `; exit ${action.exitCode}` : ''}
+                  {'error' in action && action.error ? `\n${action.error}` : ''}
+                  {action.output ? `\n${action.output.slice(-2048)}` : ''}
+                </div>
+              )}
             </motion.li>
           );
         })}
@@ -195,6 +208,9 @@ function getIconColor(status: ActionState['status']) {
       return 'text-bolt-elements-textTertiary';
     }
     case 'running': {
+      return 'text-bolt-elements-loader-progress';
+    }
+    case 'started': {
       return 'text-bolt-elements-loader-progress';
     }
     case 'complete': {

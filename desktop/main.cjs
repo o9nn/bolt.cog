@@ -90,7 +90,10 @@ async function restartApplication() {
 }
 async function loadApplication() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  try { await mainWindow.loadURL(config.appUrl + (smokeMode && process.env.BOLT_DESKTOP_SMOKE_WEBCONTAINER === '1' ? '?desktop-smoke=1' : '')); }
+  const smokeQuery = new URLSearchParams();
+  if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_WEBCONTAINER === '1') smokeQuery.set('desktop-smoke', '1');
+  if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1') smokeQuery.set('terminal-smoke', '1');
+  try { await mainWindow.loadURL(config.appUrl + (smokeQuery.size ? '?' + smokeQuery.toString() : '')); }
   catch { if (!quitting && !mainWindow.isDestroyed()) await mainWindow.loadFile(offlinePath).catch(() => {}); }
 }
 function settings() { return openSettings({ parent: mainWindow, preferences, onSaved: restartApplication }); }

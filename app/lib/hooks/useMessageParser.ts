@@ -34,7 +34,9 @@ const messageParser = new StreamingMessageParser({
         workbenchStore.addAction(data);
       }
 
-      workbenchStore.runAction(data);
+      void workbenchStore
+        .runAction(data)
+        .catch((error) => logger.error('Action failed; inspect its terminal status', error));
     },
   },
 });
