@@ -1,0 +1,148 @@
+TAP version 13
+# Subtest: real identity and system_info spawn exact immutable templates without inherited token
+ok 1 - real identity and system_info spawn exact immutable templates without inherited token
+  ---
+  duration_ms: 63.699327
+  type: 'test'
+  ...
+# Subtest: fixed-root list hides dotfiles/secret names; reads only curated UTF-8 files
+ok 2 - fixed-root list hides dotfiles/secret names; reads only curated UTF-8 files
+  ---
+  duration_ms: 46.038803
+  type: 'test'
+  ...
+# Subtest: Bearer authentication is mandatory, exact, and does not spawn on failure
+ok 3 - Bearer authentication is mandatory, exact, and does not spawn on failure
+  ---
+  duration_ms: 27.282847
+  type: 'test'
+  ...
+# Subtest: actor/workspace mapping cannot be supplied or overridden by clients
+ok 4 - actor/workspace mapping cannot be supplied or overridden by clients
+  ---
+  duration_ms: 19.442383
+  type: 'test'
+  ...
+# Subtest: unknown/mutating operations and supplied commands/options/invalid schemas are rejected
+ok 5 - unknown/mutating operations and supplied commands/options/invalid schemas are rejected
+  ---
+  duration_ms: 54.514159
+  type: 'test'
+  ...
+# Subtest: path traversal, absolute paths, encoded traversal, shell syntax and secret names are refused
+ok 6 - path traversal, absolute paths, encoded traversal, shell syntax and secret names are refused
+  ---
+  duration_ms: 39.687949
+  type: 'test'
+  ...
+# Subtest: final symlinks, directory symlinks, hardlinks, FIFOs and binary files are never read
+ok 7 - final symlinks, directory symlinks, hardlinks, FIFOs and binary files are never read
+  ---
+  duration_ms: 28.119498
+  type: 'test'
+  ...
+# Subtest: pinned root prevents substitution by a later root symlink
+ok 8 - pinned root prevents substitution by a later root symlink
+  ---
+  duration_ms: 7.962642
+  type: 'test'
+  ...
+# Subtest: body/output/file/list limits return no partial output
+ok 9 - body/output/file/list limits return no partial output
+  ---
+  duration_ms: 32.326289
+  type: 'test'
+  ...
+# Subtest: invalid JSON, compressed body, content type, Expect and redirect-like routes are refused
+ok 10 - invalid JSON, compressed body, content type, Expect and redirect-like routes are refused
+  ---
+  duration_ms: 18.345433
+  type: 'test'
+  ...
+# Subtest: slow HTTP body times out without dispatching a process
+ok 11 - slow HTTP body times out without dispatching a process
+  ---
+  duration_ms: 47.862137
+  type: 'test'
+  ...
+# Subtest: timeout kills detached child and its process group; templates remain fixed at call boundary
+ok 12 - timeout kills detached child and its process group; templates remain fixed at call boundary
+  ---
+  duration_ms: 131.004603
+  type: 'test'
+  ...
+# Subtest: concurrency is capped while the first process is still running
+ok 13 - concurrency is capped while the first process is still running
+  ---
+  duration_ms: 171.410264
+  type: 'test'
+  ...
+# Subtest: durable audit contains dispatch/terminal only, sanitized metadata, no output, token or paths
+ok 14 - durable audit contains dispatch/terminal only, sanitized metadata, no output, token or paths
+  ---
+  duration_ms: 11.30204
+  type: 'test'
+  ...
+# Subtest: dispatch audit failure prevents execution, clears output, poisons health and subsequent requests
+ok 15 - dispatch audit failure prevents execution, clears output, poisons health and subsequent requests
+  ---
+  duration_ms: 7.687992
+  type: 'test'
+  ...
+# Subtest: terminal audit failure suppresses an otherwise successful operation
+ok 16 - terminal audit failure suppresses an otherwise successful operation
+  ---
+  duration_ms: 5.113741
+  type: 'test'
+  ...
+# Subtest: unsafe audit file/root configurations fail closed at startup
+ok 17 - unsafe audit file/root configurations fail closed at startup
+  ---
+  duration_ms: 9.164762
+  type: 'test'
+  ...
+# Subtest: health has no configuration and environment allowlist defaults to empty
+ok 18 - health has no configuration and environment allowlist defaults to empty
+  ---
+  duration_ms: 7.390927
+  type: 'test'
+  ...
+# Subtest: unlinking the real durable audit file causes fail-closed refusal before spawning
+ok 19 - unlinking the real durable audit file causes fail-closed refusal before spawning
+  ---
+  duration_ms: 6.306498
+  type: 'test'
+  ...
+# Subtest: audit pairs use unique server dispatch IDs despite repeated client request IDs
+ok 20 - audit pairs use unique server dispatch IDs despite repeated client request IDs
+  ---
+  duration_ms: 7.893016
+  type: 'test'
+  ...
+# Subtest: malformed UTF-8 and missing allowlisted files return no content
+ok 21 - malformed UTF-8 and missing allowlisted files return no content
+  ---
+  duration_ms: 9.374798
+  type: 'test'
+  ...
+# Subtest: shutdown cancels work and still durably records its terminal result
+ok 22 - shutdown cancels work and still durably records its terminal result
+  ---
+  duration_ms: 20.679743
+  type: 'test'
+  ...
+# Subtest: numeric actor IDs and normalized root aliases are rejected during startup
+ok 23 - numeric actor IDs and normalized root aliases are rejected during startup
+  ---
+  duration_ms: 4.130371
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 952.50893

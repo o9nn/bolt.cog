@@ -26,13 +26,17 @@ function parseConfig(input) {
 
 function isTrustedNavigation(value, config) {
   try {
+    if (config.local) return isAppURL(value, config);
     const url = httpsURL(value);
     return url.origin === config.appOrigin || config.authOrigins.includes(url.origin);
   } catch { return false; }
 }
 
 function isAppURL(value, config) {
-  try { return httpsURL(value).origin === config.appOrigin; } catch { return false; }
+  try {
+    const url = config.local ? new URL(value) : httpsURL(value);
+    return !url.username && !url.password && url.origin === config.appOrigin;
+  } catch { return false; }
 }
 
 function isSafeDownload(value, config) {
@@ -65,4 +69,12 @@ function safeFilename(value) {
   return name && !/^\.+$/.test(name) ? name : 'bolt-export.zip';
 }
 
-module.exports = { PARTITION, parseConfig, isTrustedNavigation, isAppURL, isSafeDownload, rendererPreferences, safeFilename };
+function localConfig(origin) {
+  const url = new URL(origin);
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+    throw new Error('Local origin must be an exact loopback server origin');
+  }
+  return Object.freeze({ local: true, appUrl: url.href, appOrigin: url.origin, authOrigins: Object.freeze([]) });
+}
+
+module.exports = { PARTITION, parseConfig, localConfig, isTrustedNavigation, isAppURL, isSafeDownload, rendererPreferences, safeFilename };

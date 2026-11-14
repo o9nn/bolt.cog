@@ -6,15 +6,24 @@ on:
       - 'desktop/**'
       - '.github/workflows/electron-release.yml'
       - 'docs/ELECTRON_RELEASE.md'
+      - 'app/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'vite.config.ts'
   push:
     branches:
       - feat/electron-desktop-release
+      - feat/electron-local-runtime
     tags:
       - 'desktop-v*'
     paths:
       - 'desktop/**'
       - '.github/workflows/electron-release.yml'
       - 'docs/ELECTRON_RELEASE.md'
+      - 'app/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'vite.config.ts'
   workflow_dispatch:
 
 # Packaging never receives a write token or signing secrets.
@@ -115,9 +124,10 @@ jobs:
             libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
             libxrandr2 libxtst6 libfuse2t64
 
-      - name: Install only desktop dependencies
+      - name: Install frozen application and desktop dependencies
         run: |
           test "$(pnpm --version)" = '9.4.0'
+          pnpm install --frozen-lockfile
           pnpm --dir desktop install --frozen-lockfile
 
       - name: Verify installed tool versions
@@ -127,6 +137,21 @@ jobs:
           assert.equal(require('./desktop/node_modules/electron/package.json').version, '45.3.2');
           assert.equal(require('./desktop/node_modules/electron-builder/package.json').version, '26.18.0');
           NODE
+
+      - name: Build bundled local application runtime
+        run: pnpm run build:desktop
+
+      - name: Test application and type-check integration
+        env:
+          BUILD_PLATFORM: ${{ matrix.platform }}
+        run: |
+          if [ "$BUILD_PLATFORM" = linux ]; then
+            pnpm test
+          else
+            # This single integration targets the separate Linux-only remote service, not the portable desktop adapter.
+            pnpm exec vitest --run --exclude app/lib/.server/native-execution.spec.ts
+          fi
+          pnpm typecheck
 
       - name: Test desktop security policy
         run: pnpm --dir desktop test
@@ -274,7 +299,9 @@ jobs:
           cat > release-notes.md <<'NOTES'
           Maintainer preview of Bolt Cog Desktop. These installers are unsigned and macOS builds are not notarized. They are not approved production distribution builds.
 
-          The desktop shell loads https://bolt-cog.pages.dev and authenticates through https://rzo.cloudflareaccess.com. Network access is required; the offline screen is an error/retry UI, not an offline workspace. No preload, IPC bridge, or host command execution is provided.
+          This local-first build bundles the real Bolt UI and Node chat backend, hosted on authenticated loopback rather than bolt-cog.pages.dev. Configure a separately installed real OpenAI-compatible engine/model in File → Inference settings; direct Anthropic is optional. No inference engine or model weights are implicitly bundled and no simulated inference fallback is used.
+
+          The primary renderer retains Node denial and sandboxing. A separate local settings-only IPC interface uses OS-encrypted, endpoint-scoped keys. Opt-in Agent-Zero native inspection is read-only and audited; no arbitrary host shell, sudo, install or deletion is granted. WebContainer terminal/preview is retained and still can require vendor runtime/preview and package-download network access; this is not a fully air-gapped browser-engine replacement.
 
           Verify each downloaded installer against SHA256SUMS. Review platform launch tests, security policy, production signing and macOS notarization before any manual publication. This workflow never publishes the draft automatically.
           NOTES

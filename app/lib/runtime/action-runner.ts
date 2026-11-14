@@ -98,6 +98,11 @@ export class ActionRunner {
   async #executeAction(actionId: string) {
     const action = this.actions.get()[actionId];
 
+    if (action.abortSignal.aborted) {
+      this.#updateAction(actionId, { status: 'aborted' });
+      return;
+    }
+
     this.#updateAction(actionId, { status: 'running' });
 
     try {
@@ -114,7 +119,10 @@ export class ActionRunner {
 
       this.#updateAction(actionId, { status: action.abortSignal.aborted ? 'aborted' : 'complete' });
     } catch (error) {
-      this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
+      this.#updateAction(actionId, {
+        status: action.abortSignal.aborted ? 'aborted' : 'failed',
+        error: error instanceof Error ? error.message : 'Action failed',
+      });
 
       // re-throw the error to be caught in the promise chain
       throw error;
@@ -132,11 +140,14 @@ export class ActionRunner {
       env: { npm_config_yes: true },
     });
 
-    action.abortSignal.addEventListener('abort', () => {
-      process.kill();
-    });
+    const kill = () => process.kill();
+    action.abortSignal.addEventListener('abort', kill, { once: true });
 
-    process.output.pipeTo(
+    if (action.abortSignal.aborted) {
+      kill();
+    }
+
+    const output = process.output.pipeTo(
       new WritableStream({
         write(data) {
           console.log(data);
@@ -144,9 +155,16 @@ export class ActionRunner {
       }),
     );
 
-    const exitCode = await process.exit;
+    try {
+      const [exitCode] = await Promise.all([process.exit, output]);
+      logger.debug(`Process terminated with code ${exitCode}`);
 
-    logger.debug(`Process terminated with code ${exitCode}`);
+      if (exitCode !== 0 && !action.abortSignal.aborted) {
+        throw new Error(`WebContainer command exited with code ${exitCode}`);
+      }
+    } finally {
+      action.abortSignal.removeEventListener('abort', kill);
+    }
   }
 
   async #runFileAction(action: ActionState) {
@@ -162,20 +180,12 @@ export class ActionRunner {
     folder = folder.replace(/\/+$/g, '');
 
     if (folder !== '.') {
-      try {
-        await webcontainer.fs.mkdir(folder, { recursive: true });
-        logger.debug('Created folder', folder);
-      } catch (error) {
-        logger.error('Failed to create folder\n\n', error);
-      }
+      await webcontainer.fs.mkdir(folder, { recursive: true });
+      logger.debug('Created folder', folder);
     }
 
-    try {
-      await webcontainer.fs.writeFile(action.filePath, action.content);
-      logger.debug(`File written ${action.filePath}`);
-    } catch (error) {
-      logger.error('Failed to write file\n\n', error);
-    }
+    await webcontainer.fs.writeFile(action.filePath, action.content);
+    logger.debug(`File written ${action.filePath}`);
   }
 
   #updateAction(id: string, newState: ActionStateUpdate) {

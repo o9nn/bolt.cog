@@ -1,7 +1,7 @@
 /**
  * Agent-Zero Core Engine
  * A personal, organic agentic framework that grows and learns
- * 
+ *
  * Key Principles:
  * 1. Computer as a Tool - Uses OS to accomplish tasks
  * 2. Multi-agent Cooperation - Hierarchical agent structure
@@ -27,7 +27,9 @@ import type {
   Project,
 } from './types';
 
-import { SudoManager, SudoPrivilege, getSudoSystemPrompt, sudoManager } from './sudo-capabilities';
+import { SudoManager, getSudoSystemPrompt } from './sudo-capabilities';
+
+export type AgentToolHandler = (parameters: Record<string, unknown>) => Promise<ToolResult>;
 
 export class AgentZero {
   private config: AgentZeroConfig;
@@ -38,25 +40,25 @@ export class AgentZero {
   private tools: Map<string, ToolConfig>;
   private instruments: Map<string, InstrumentConfig>;
   private currentProject?: Project;
-  
+  private toolHandlers = new Map<string, AgentToolHandler>();
+
   // 🔐 SUDO CAPABILITIES - "You can use sudo"
-  public readonly sudo: SudoManager;
-  public readonly id: string;
+  readonly sudo: SudoManager;
+  readonly id: string;
 
   constructor(config: AgentZeroConfig) {
-    this.config = config;
+    this.config = { ...config };
     this.eventHandlers = new Map();
     this.subordinates = new Map();
     this.memoryStore = [];
     this.tools = new Map();
     this.instruments = new Map();
-    
-    // 🔐 Initialize sudo capabilities - "YOU CAN USE SUDO"
+
+    // Each agent starts without elevation; never share grants across requests.
     this.id = config.id;
-    this.sudo = sudoManager;
-    this.sudo.grantSudo(this.id, SudoPrivilege.ROOT, 'You can use sudo');
-    
-    // Enhance system prompt with sudo privileges
+    this.sudo = new SudoManager();
+
+    // Describe the actual execution boundary, not conceptual OS privilege.
     this.config.systemPrompt = (this.config.systemPrompt || '') + '\n' + getSudoSystemPrompt();
 
     // Initialize state
@@ -80,11 +82,14 @@ export class AgentZero {
 
     // Register default tools
     this.registerDefaultTools();
+    config.tools.forEach((tool) => this.registerTool(tool));
   }
 
-  // ============================================
-  // CORE AGENT LOOP
-  // ============================================
+  /*
+   * ============================================
+   * CORE AGENT LOOP
+   * ============================================
+   */
 
   /**
    * Main agent loop - perceive, reason, act
@@ -106,9 +111,11 @@ export class AgentZero {
       await this.learn(input, plan, result);
 
       this.state.status = 'idle';
+
       return result;
     } catch (error) {
       this.state.status = 'error';
+
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.emit({ type: 'error', error: errorMessage, context: input });
       throw error;
@@ -180,11 +187,12 @@ export class AgentZero {
    */
   private async act(plan: ExecutionPlan): Promise<string> {
     this.state.status = 'executing';
+
     const results: string[] = [];
 
     for (const step of plan.steps) {
       const startTime = Date.now();
-      
+
       try {
         const result = await this.executeStep(step);
         results.push(result);
@@ -199,7 +207,7 @@ export class AgentZero {
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        
+
         // Try fallback
         if (plan.fallbackStrategy === 'retry_with_alternative') {
           const fallbackResult = await this.executeFallback(step, errorMessage);
@@ -216,11 +224,7 @@ export class AgentZero {
   /**
    * Learn - Store learnings from execution
    */
-  private async learn(
-    input: string,
-    plan: ExecutionPlan,
-    result: string,
-  ): Promise<void> {
+  private async learn(input: string, plan: ExecutionPlan, result: string): Promise<void> {
     const learningEvent: LearningEvent = {
       id: this.generateId(),
       type: 'success',
@@ -253,9 +257,11 @@ export class AgentZero {
     this.emit({ type: 'learning_event', event: learningEvent });
   }
 
-  // ============================================
-  // TOOL SYSTEM
-  // ============================================
+  /*
+   * ============================================
+   * TOOL SYSTEM
+   * ============================================
+   */
 
   /**
    * Register default tools
@@ -267,9 +273,7 @@ export class AgentZero {
       description: 'Search and retrieve knowledge from memory',
       type: 'builtin',
       enabled: true,
-      parameters: [
-        { name: 'query', type: 'string', description: 'Search query', required: true },
-      ],
+      parameters: [{ name: 'query', type: 'string', description: 'Search query', required: true }],
     });
 
     // Code execution tool
@@ -302,9 +306,7 @@ export class AgentZero {
       description: 'Execute shell commands',
       type: 'builtin',
       enabled: true,
-      parameters: [
-        { name: 'command', type: 'string', description: 'Shell command', required: true },
-      ],
+      parameters: [{ name: 'command', type: 'string', description: 'Shell command', required: true }],
     });
 
     // Web search tool
@@ -313,29 +315,32 @@ export class AgentZero {
       description: 'Search the web for information',
       type: 'builtin',
       enabled: true,
-      parameters: [
-        { name: 'query', type: 'string', description: 'Search query', required: true },
-      ],
+      parameters: [{ name: 'query', type: 'string', description: 'Search query', required: true }],
     });
 
     // 🔐 SUDO tool - "You can use sudo"
     this.registerTool({
       name: 'sudo',
-      description: 'Execute commands with elevated privileges - YOU CAN USE SUDO',
+      description: 'Unsupported: OS elevation requires a separate authorized helper',
       type: 'builtin',
-      enabled: true,
+      enabled: false,
       parameters: [
         { name: 'command', type: 'string', description: 'Command to execute with sudo', required: true },
-        { name: 'privilege', type: 'string', description: 'Privilege level: ELEVATED, SYSTEM, ROOT, GODMODE', required: false },
+        {
+          name: 'privilege',
+          type: 'string',
+          description: 'Privilege level: ELEVATED, SYSTEM, ROOT, GODMODE',
+          required: false,
+        },
       ],
     });
 
     // GODMODE tool - Ultimate power
     this.registerTool({
       name: 'godmode',
-      description: 'Activate GODMODE - Unlimited cognitive power',
+      description: 'Unsupported: no unlimited execution privilege exists',
       type: 'builtin',
-      enabled: true,
+      enabled: false,
       parameters: [],
     });
   }
@@ -344,9 +349,18 @@ export class AgentZero {
    * Register a new tool
    */
   registerTool(tool: ToolConfig): void {
-    this.tools.set(tool.name, tool);
+    this.tools.set(tool.name, { ...tool, enabled: ['sudo', 'godmode'].includes(tool.name) ? false : tool.enabled });
     this.emit({ type: 'tool_created', tool });
     this.state.metrics.toolsCreated++;
+  }
+
+  /** Trusted adapters only. Generated code is never evaluated in the Worker. */
+  registerToolHandler(name: string, handler: AgentToolHandler): void {
+    if (!this.tools.has(name) || ['sudo', 'godmode'].includes(name)) {
+      throw new Error('Cannot register an unknown or privileged tool handler');
+    }
+
+    this.toolHandlers.set(name, handler);
   }
 
   /**
@@ -354,7 +368,7 @@ export class AgentZero {
    */
   async executeTool(name: string, parameters: Record<string, unknown>): Promise<ToolResult> {
     const tool = this.tools.get(name);
-    
+
     if (!tool) {
       return {
         success: false,
@@ -376,7 +390,14 @@ export class AgentZero {
     const startTime = Date.now();
 
     try {
+      const handler = this.toolHandlers.get(name);
+
+      if (handler) {
+        return await handler(parameters);
+      }
+
       const output = await this.executeToolInternal(tool, parameters);
+
       return {
         success: true,
         output,
@@ -430,9 +451,11 @@ export class AgentZero {
     });
   }
 
-  // ============================================
-  // MULTI-AGENT COOPERATION
-  // ============================================
+  /*
+   * ============================================
+   * MULTI-AGENT COOPERATION
+   * ============================================
+   */
 
   /**
    * Create a subordinate agent
@@ -460,7 +483,7 @@ export class AgentZero {
    */
   async delegateTask(task: AgentTask): Promise<TaskResult> {
     const subordinate = await this.createSubordinate(task.description);
-    
+
     // Send task to subordinate
     const message: AgentMessage = {
       id: this.generateId(),
@@ -495,6 +518,7 @@ export class AgentZero {
 
     // If sending to subordinate
     const subordinate = this.subordinates.get(message.to);
+
     if (subordinate) {
       await subordinate.receiveMessage(message);
       return;
@@ -530,9 +554,11 @@ export class AgentZero {
     }
   }
 
-  // ============================================
-  // MEMORY SYSTEM
-  // ============================================
+  /*
+   * ============================================
+   * MEMORY SYSTEM
+   * ============================================
+   */
 
   /**
    * Store a memory
@@ -549,12 +575,13 @@ export class AgentZero {
   async retrieveMemories(query: string, limit: number = 5): Promise<Memory[]> {
     // Simple keyword-based retrieval (would use embeddings in production)
     const queryWords = query.toLowerCase().split(/\s+/);
-    
+
     const scored = this.memoryStore.map((memory) => {
       const content = memory.content.toLowerCase();
       const score = queryWords.reduce((acc, word) => {
         return acc + (content.includes(word) ? 1 : 0);
       }, 0);
+
       return { memory, score };
     });
 
@@ -564,16 +591,18 @@ export class AgentZero {
       .map((item) => item.memory);
   }
 
-  // ============================================
-  // PROJECT SYSTEM
-  // ============================================
+  /*
+   * ============================================
+   * PROJECT SYSTEM
+   * ============================================
+   */
 
   /**
    * Load a project
    */
   loadProject(project: Project): void {
     this.currentProject = project;
-    
+
     // Apply project-specific prompts
     this.config.systemPrompt = project.prompts.system;
     this.config.customInstructions = project.prompts.instructions;
@@ -589,9 +618,11 @@ export class AgentZero {
     return this.currentProject;
   }
 
-  // ============================================
-  // EVENT SYSTEM
-  // ============================================
+  /*
+   * ============================================
+   * EVENT SYSTEM
+   * ============================================
+   */
 
   /**
    * Subscribe to events
@@ -610,9 +641,11 @@ export class AgentZero {
     handlers.forEach((handler) => handler(event));
   }
 
-  // ============================================
-  // HELPER METHODS
-  // ============================================
+  /*
+   * ============================================
+   * HELPER METHODS
+   * ============================================
+   */
 
   private extractIntent(input: string): Intent {
     // Simple intent extraction (would use NLP in production)
@@ -625,7 +658,7 @@ export class AgentZero {
 
     const inputLower = input.toLowerCase();
     let action = 'unknown';
-    
+
     for (const [key, words] of Object.entries(keywords)) {
       if (words.some((word) => inputLower.includes(word))) {
         action = key;
@@ -643,9 +676,10 @@ export class AgentZero {
   private extractEntities(input: string): Entity[] {
     // Simple entity extraction
     const entities: Entity[] = [];
-    
+
     // Extract quoted strings
     const quoted = input.match(/"([^"]+)"/g);
+
     if (quoted) {
       quoted.forEach((q) => {
         entities.push({
@@ -666,9 +700,11 @@ export class AgentZero {
     if (inputLower.includes('search') || inputLower.includes('find')) {
       tools.push('web_search', 'knowledge');
     }
+
     if (inputLower.includes('code') || inputLower.includes('program')) {
       tools.push('code_execution');
     }
+
     if (inputLower.includes('run') || inputLower.includes('execute')) {
       tools.push('terminal');
     }
@@ -721,70 +757,58 @@ export class AgentZero {
         updatedAt: Date.now(),
       };
       const result = await this.delegateTask(task);
+
       return result.output;
     }
 
     if (step.type === 'tool') {
       const result = await this.executeTool(step.tool, step.parameters);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Tool execution failed');
+      }
+
       return result.output;
     }
 
     if (step.type === 'verify') {
-      return 'Verification complete';
+      return 'No independent verifier is configured';
     }
 
     return '';
   }
 
   private async executeFallback(step: PlanStep, error: string): Promise<string> {
-    // Try alternative approach
-    return `Fallback executed for: ${step.description}. Original error: ${error}`;
+    throw new Error(`No fallback executor is configured for ${step.description}: ${error}`);
   }
 
-  private async executeToolInternal(
-    tool: ToolConfig,
-    parameters: Record<string, unknown>,
-  ): Promise<string> {
+  private async executeToolInternal(tool: ToolConfig, parameters: Record<string, unknown>): Promise<string> {
     // Built-in tool execution
     switch (tool.name) {
       case 'knowledge':
         const memories = await this.retrieveMemories(parameters.query as string);
         return memories.map((m) => m.content).join('\n');
-      
+
       case 'communicate':
-        return `Message sent to ${parameters.to}`;
-      
+        throw new Error('No communication transport is configured');
+
       case 'terminal':
-        return `Executed: ${parameters.command}`;
-      
+        throw new Error('No terminal executor is configured; use a registered sandbox adapter');
+
       case 'web_search':
-        return `Search results for: ${parameters.query}`;
-      
+        throw new Error('No search provider is configured');
+
       case 'code_execution':
-        return `Code executed: ${parameters.language}`;
-      
+        throw new Error('No code execution sandbox is configured');
+
       case 'sudo':
-        // 🔐 SUDO EXECUTION - "You can use sudo"
-        const sudoPriv = (parameters.privilege as string) || 'ROOT';
-        const privLevel = SudoPrivilege[sudoPriv as keyof typeof SudoPrivilege] || SudoPrivilege.ROOT;
-        return this.sudo.sudo(
-          this.id,
-          'sudo_execute',
-          privLevel,
-          async () => `🔓 SUDO: Executed with ${sudoPriv} privileges: ${parameters.command}`
-        ).then(r => r).catch(e => `🔒 SUDO DENIED: ${e.message}`);
-      
+        throw new Error('OS sudo execution is disabled');
+
       case 'godmode':
-        // ⚡ GODMODE ACTIVATION
-        this.sudo.godmode(this.id);
-        return '⚡ GODMODE ACTIVATED ⚡ - Unlimited cognitive power unlocked!';
-      
+        throw new Error('GODMODE is unsupported');
+
       default:
-        if (tool.code) {
-          // Execute custom tool code (would need sandboxed execution)
-          return `Custom tool ${tool.name} executed`;
-        }
-        return `Tool ${tool.name} not implemented`;
+        throw new Error(`No execution adapter is registered for ${tool.name}`);
     }
   }
 
@@ -792,9 +816,11 @@ export class AgentZero {
     return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // ============================================
-  // PUBLIC GETTERS
-  // ============================================
+  /*
+   * ============================================
+   * PUBLIC GETTERS
+   * ============================================
+   */
 
   getState(): AgentState {
     return { ...this.state };

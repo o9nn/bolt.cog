@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react';
-import type { Message } from 'ai';
+import { parseStreamPart, type Message } from 'ai';
 import { useChat } from 'ai/react';
 import { useAnimate } from 'framer-motion';
 import { memo, useEffect, useRef, useState } from 'react';
@@ -72,14 +72,32 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
   const [chatStarted, setChatStarted] = useState(initialMessages.length > 0);
 
   const { showChat } = useStore(chatStore);
+  const [localRuntime, setLocalRuntime] = useState(false);
+  const [localTools, setLocalTools] = useState(false);
 
   const [animationScope, animate] = useAnimate();
 
   const { messages, isLoading, input, handleInputChange, setInput, stop, append } = useChat({
     api: '/api/chat',
+    body: localRuntime && localTools ? { execution: { backend: 'desktop', workspaceId: 'desktop' } } : {},
     onError: (error) => {
       logger.error('Request failed\n\n', error);
-      toast.error('There was an error processing your request');
+
+      let message = error.message || 'Chat failed; inspect the request ID';
+
+      if (message.startsWith('3:')) {
+        try {
+          const part = parseStreamPart(message.trim().split('\n')[0]);
+
+          if (part.type === 'error') {
+            message = part.value;
+          }
+        } catch {
+          message = 'Chat failed; inspect the request ID';
+        }
+      }
+
+      toast.error(message);
     },
     onFinish: () => {
       logger.debug('Finished streaming');
@@ -91,6 +109,19 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
   const { parsedMessages, parseMessages } = useMessageParser();
 
   const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
+
+  useEffect(() => {
+    if (window.location.hostname !== '127.0.0.1') {
+      return;
+    }
+
+    fetch('/api/desktop/info')
+      .then((response) => (response.ok ? response.json() : undefined))
+      .then((info) =>
+        setLocalRuntime(typeof info === 'object' && info !== null && 'runtime' in info && info.runtime === 'desktop'),
+      )
+      .catch(() => setLocalRuntime(false));
+  }, []);
 
   useEffect(() => {
     chatStore.setKey('started', initialMessages.length > 0);
@@ -199,36 +230,49 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
   const [messageRef, scrollRef] = useSnapScroll();
 
   return (
-    <BaseChat
-      ref={animationScope}
-      textareaRef={textareaRef}
-      input={input}
-      showChat={showChat}
-      chatStarted={chatStarted}
-      isStreaming={isLoading}
-      enhancingPrompt={enhancingPrompt}
-      promptEnhanced={promptEnhanced}
-      sendMessage={sendMessage}
-      messageRef={messageRef}
-      scrollRef={scrollRef}
-      handleInputChange={handleInputChange}
-      handleStop={abort}
-      messages={messages.map((message, i) => {
-        if (message.role === 'user') {
-          return message;
-        }
+    <>
+      {localRuntime && (
+        <label style={{ position: 'fixed', top: 12, right: 120, zIndex: 50, fontSize: 12 }}>
+          <input
+            type="checkbox"
+            checked={localTools}
+            disabled={isLoading}
+            onChange={(event) => setLocalTools(event.target.checked)}
+          />{' '}
+          Local read-only Agent-Zero tools
+        </label>
+      )}
+      <BaseChat
+        ref={animationScope}
+        textareaRef={textareaRef}
+        input={input}
+        showChat={showChat}
+        chatStarted={chatStarted}
+        isStreaming={isLoading}
+        enhancingPrompt={enhancingPrompt}
+        promptEnhanced={promptEnhanced}
+        sendMessage={sendMessage}
+        messageRef={messageRef}
+        scrollRef={scrollRef}
+        handleInputChange={handleInputChange}
+        handleStop={abort}
+        messages={messages.map((message, i) => {
+          if (message.role === 'user') {
+            return message;
+          }
 
-        return {
-          ...message,
-          content: parsedMessages[i] || '',
-        };
-      })}
-      enhancePrompt={() => {
-        enhancePrompt(input, (input) => {
-          setInput(input);
-          scrollTextArea();
-        });
-      }}
-    />
+          return {
+            ...message,
+            content: parsedMessages[i] || '',
+          };
+        })}
+        enhancePrompt={() => {
+          enhancePrompt(input, (input) => {
+            setInput(input);
+            scrollTextArea();
+          });
+        }}
+      />
+    </>
   );
 });

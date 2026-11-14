@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bolt Cog · Local provider settings</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101827; color: #e5edf8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; }
+    main { max-width: 600px; margin: auto; }
+    .eyebrow { color: #89b5ff; font-size: 12px; font-weight: 700; letter-spacing: .14em; }
+    h1 { font-size: 27px; margin: 12px 0; }
+    p { color: #b0bdd1; line-height: 1.55; font-size: 14px; }
+    form { border-top: 1px solid #304158; margin-top: 24px; padding-top: 20px; }
+    label { display: block; font-weight: 600; margin: 18px 0 8px; font-size: 14px; }
+    input:not([type="checkbox"]), select { width: 100%; font: inherit; padding: 12px; border-radius: 8px; border: 1px solid #435573; background: #19263a; color: #fff; }
+    input:focus, select:focus, button:focus-visible { outline: 2px solid #89b5ff; outline-offset: 3px; }
+    .help { margin: 8px 0 0; font-size: 12px; }
+    .choice { font-weight: 400; display: flex; align-items: center; gap: 10px; }
+    .choice input { width: 17px; height: 17px; }
+    .state { color: #adceff; font-size: 13px; }
+    button { width: 100%; margin-top: 24px; padding: 13px; font: inherit; font-weight: 700; border: 0; border-radius: 8px; color: #101827; background: #a8c9ff; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: default; }
+    #status { min-height: 42px; margin-top: 16px; }
+    #status[data-error="true"] { color: #ffb5b5; }
+    [hidden] { display: none !important; }
+  </style>
+  <script src="./settings.js" defer></script>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">TRUSTED LOCAL SETTINGS</div>
+    <h1>Choose your model provider</h1>
+    <p>Configure the provider used by the local backend. Saving updates configuration only; it does not verify connectivity or run inference. No model is bundled or selected automatically.</p>
+    <form id="settings-form" autocomplete="off">
+      <label for="provider">Provider</label>
+      <select id="provider" name="provider" disabled>
+        <option value="openai-compatible">OpenAI-compatible · local or HTTPS server</option>
+        <option value="anthropic">Anthropic</option>
+      </select>
+      <div id="endpoint-field">
+        <label for="base-url">Provider base URL</label>
+        <input id="base-url" name="baseURL" type="url" maxlength="2048" value="http://127.0.0.1:8080/v1" spellcheck="false" aria-describedby="endpoint-help" disabled>
+        <p class="help" id="endpoint-help">HTTP is allowed only on loopback (127.0.0.1, localhost or ::1). Other hosts require HTTPS. No URL credentials, query or fragment.</p>
+      </div>
+      <label for="model">Actual model ID</label>
+      <input id="model" name="model" type="text" maxlength="256" placeholder="Enter the exact ID served by your provider" required spellcheck="false" disabled>
+      <p class="help">Use your provider’s real model identifier, not a display name. An empty model is not a working configuration.</p>
+      <label for="api-key">API key</label>
+      <input id="api-key" name="apiKey" type="password" maxlength="8192" autocomplete="off" placeholder="Leave empty to keep the existing key" spellcheck="false" aria-describedby="key-status" disabled>
+      <p class="state" id="key-status">Checking whether a key is configured…</p>
+      <label class="choice"><input id="persist-key" type="checkbox" disabled>Save new key with OS-protected encryption</label>
+      <p class="help" id="storage-help">Unchecked: a new key is kept only for this desktop session and replaces any stored key for this provider. No plaintext key is written.</p>
+      <label class="choice"><input id="clear-key" type="checkbox" disabled>Explicitly clear this provider’s stored/session key</label>
+      <p class="help">Clearing cannot remove environment variables. The backend may still use an environment key. Empty key input alone never clears a saved key.</p>
+      <button id="save" type="submit" disabled>Save provider configuration</button>
+    </form>
+    <p id="status" role="status" aria-live="polite">Loading local configuration…</p>
+  </main>
+</body>
+</html>
