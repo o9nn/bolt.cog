@@ -7,6 +7,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig((config) => {
   return {
+    test: {
+      include: ['app/**/*.spec.ts', 'app/**/*.spec.tsx'],
+    },
     build: {
       target: 'esnext',
 
@@ -17,7 +20,7 @@ export default defineConfig((config) => {
       nodePolyfills({
         include: ['path', 'buffer'],
       }),
-      config.mode !== 'test' && remixCloudflareDevProxy(),
+      !['test', 'desktop'].includes(config.mode) && remixCloudflareDevProxy(),
       remixVitePlugin({
         future: {
           v3_fetcherPersist: true,
@@ -28,7 +31,7 @@ export default defineConfig((config) => {
       UnoCSS(),
       tsconfigPaths(),
       chrome129IssuePlugin(),
-      config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
+      ['production', 'desktop'].includes(config.mode) && optimizeCssModules({ apply: 'build' }),
     ],
   };
 });

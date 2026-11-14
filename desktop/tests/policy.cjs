@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { parseConfig, isTrustedNavigation, isSafeDownload, rendererPreferences, safeFilename } = require('../policy.cjs');
+const { parseConfig, localConfig, isTrustedNavigation, isSafeDownload, rendererPreferences, safeFilename } = require('../policy.cjs');
 const config = parseConfig(require('../app.config.json'));
 const pkg = require('../package.json');
 
@@ -70,6 +70,17 @@ test('source defines no IPC bridge, certificate bypass or no-sandbox switch', ()
 test('offline page truthfully reports network dependency and includes restrictive CSP', () => {
   const page = fs.readFileSync(path.join(__dirname, '../offline.html'), 'utf8');
   assert.match(page, /default-src 'none'/);
-  assert.match(page, /does not bundle an offline model/);
+  assert.match(page, /native inference engine must be installed separately/);
   assert.doesNotMatch(page, /<script|iframe|http-equiv="refresh"/);
+});
+
+test('local origin is exact and never falls back to Cloudflare', () => {
+  const local = localConfig('http://127.0.0.1:45678');
+  assert.equal(isTrustedNavigation('http://127.0.0.1:45678/chat', local), true);
+  for (const url of ['http://127.0.0.1:45679/', 'https://bolt-cog.pages.dev/', 'http://localhost:45678/', 'http://user:pass@127.0.0.1:45678/', 'file:///etc/passwd']) {
+    assert.equal(isTrustedNavigation(url, local), false);
+  }
+  assert.equal(isSafeDownload('blob:http://127.0.0.1:45678/id', local), true);
+  for (const origin of ['http://0.0.0.0:45678', 'http://localhost:45678', 'https://evil.test', 'http://127.0.0.1:45678/?token=x']) assert.throws(() => localConfig(origin));
+  assert.equal(pkg.build.extraResources[0].to, 'runtime');
 });

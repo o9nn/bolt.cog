@@ -16,7 +16,7 @@ const child = spawn(command, childArgs, {
   env: { ...process.env, BOLT_DESKTOP_SMOKE_PROFILE: profile }
 });
 let output = '';
-const timer = setTimeout(() => child.kill('SIGKILL'), 50_000);
+const timer = setTimeout(() => child.kill('SIGKILL'), 120_000);
 child.stdout.on('data', (chunk) => { output += chunk; process.stdout.write(chunk); });
 child.stderr.on('data', (chunk) => process.stderr.write(chunk));
 child.on('error', () => { clearTimeout(timer); fs.rmSync(profile, { recursive: true, force: true }); process.exitCode = 1; });

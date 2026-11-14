@@ -36,7 +36,7 @@ describe('CognitiveGrammarEngine', () => {
       expect(result.tokens[0]).toEqual({
         type: 'keyword',
         value: 'create',
-        _position: 0,
+        position: 0,
         semanticRole: 'action',
       });
     });

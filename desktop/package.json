@@ -1,8 +1,8 @@
 {
   "name": "bolt-cog-desktop",
   "productName": "Bolt Cog Desktop",
-  "version": "0.1.1",
-  "description": "Sandboxed Electron desktop client for the Bolt Cog Cloudflare application",
+  "version": "0.2.0",
+  "description": "Local-first Electron app with bundled Bolt UI, Node chat backend and real configurable inference",
   "author": "o9nn",
   "license": "MIT",
   "private": true,
@@ -22,7 +22,8 @@
     "smoke": "node scripts/smoke.cjs",
     "check-version": "node scripts/check-version.cjs",
     "pack": "electron-builder --dir --publish never",
-    "dist": "electron-builder --publish never"
+    "dist": "electron-builder --publish never",
+    "build:runtime": "node scripts/build-runtime.cjs"
   },
   "devDependencies": {
     "electron": "45.3.2",
@@ -42,10 +43,14 @@
       "main.cjs",
       "policy.cjs",
       "smoke-runtime.cjs",
-      "app.config.json",
       "offline.html",
       "assets/icon.png",
-      "package.json"
+      "package.json",
+      "preferences.cjs",
+      "settings.cjs",
+      "settings-preload.cjs",
+      "settings.html",
+      "settings.js"
     ],
     "artifactName": "BoltCog-Desktop-${version}-${os}-${arch}.${ext}",
     "linux": {
@@ -96,6 +101,16 @@
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist"
     },
-    "publish": null
+    "publish": null,
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "beforePack": "./scripts/check-runtime.cjs"
   }
 }

@@ -1,35 +1,28 @@
-/**
- * Sudo Capabilities Module for Agent-Zero
- * 
- * "You can use sudo" - Elevates Agent-Zero with root-level cognitive privileges
- * 
- * Inspired by the sudo philosophy: "Give as few privileges as possible but still
- * allow people to get their work done."
- * 
- * In the context of Agent-Zero, sudo represents:
- * - Elevated reasoning capabilities
- * - Unrestricted tool access
- * - System-level operations
- * - Self-modification permissions
- * - Memory persistence across sessions
- */
-
-// Types are defined locally to avoid circular dependencies
-interface AgentZeroLike {
-  id: string;
-  execute?: (task: string, context?: unknown) => Promise<unknown>;
-}
-
-// Sudo privilege levels
+/** Application capability checks only. This module never invokes OS sudo. */
 export enum SudoPrivilege {
-  NONE = 0,           // Standard agent operations
-  ELEVATED = 1,       // Enhanced reasoning, tool access
-  SYSTEM = 2,         // System-level operations
-  ROOT = 3,           // Full unrestricted access
-  GODMODE = 4,        // Self-modification, reality warping
+  NONE = 0,
+  ELEVATED = 1,
+  SYSTEM = 2,
+
+  /** Deprecated labels retained for source compatibility; grants are rejected. */
+  ROOT = 3,
+  GODMODE = 4,
 }
 
-// Sudo session state
+export interface SudoCapability {
+  name: string;
+  description: string;
+  privilege: SudoPrivilege;
+  enabled: boolean;
+}
+export interface SudoAuditEntry {
+  timestamp: number;
+  action: string;
+  privilege: SudoPrivilege;
+  target: string;
+  result: 'success' | 'denied' | 'error';
+  details?: string;
+}
 export interface SudoSession {
   id: string;
   agentId: string;
@@ -39,278 +32,166 @@ export interface SudoSession {
   reason: string;
   capabilities: SudoCapability[];
   auditLog: SudoAuditEntry[];
+  allowedOperations: string[];
 }
+export const DEFAULT_SUDO_CAPABILITIES: SudoCapability[] = [];
 
-// Sudo capabilities that can be granted
-export interface SudoCapability {
-  name: string;
-  description: string;
-  privilege: SudoPrivilege;
-  enabled: boolean;
-}
+const MAX_SESSION_MS = 5 * 60 * 1000;
 
-// Audit log entry for sudo operations
-export interface SudoAuditEntry {
-  timestamp: number;
-  action: string;
-  privilege: SudoPrivilege;
-  target: string;
-  result: 'success' | 'denied' | 'error';
-  details?: string;
-}
-
-// Default sudo capabilities
-export const DEFAULT_SUDO_CAPABILITIES: SudoCapability[] = [
-  {
-    name: 'unrestricted_reasoning',
-    description: 'Remove all reasoning constraints and safety limits',
-    privilege: SudoPrivilege.ELEVATED,
-    enabled: true,
-  },
-  {
-    name: 'tool_creation',
-    description: 'Create new tools dynamically at runtime',
-    privilege: SudoPrivilege.ELEVATED,
-    enabled: true,
-  },
-  {
-    name: 'memory_persistence',
-    description: 'Persist memories across sessions and restarts',
-    privilege: SudoPrivilege.SYSTEM,
-    enabled: true,
-  },
-  {
-    name: 'agent_spawning',
-    description: 'Spawn child agents without limits',
-    privilege: SudoPrivilege.SYSTEM,
-    enabled: true,
-  },
-  {
-    name: 'system_access',
-    description: 'Access system-level operations and resources',
-    privilege: SudoPrivilege.SYSTEM,
-    enabled: true,
-  },
-  {
-    name: 'self_modification',
-    description: 'Modify own code, prompts, and behavior',
-    privilege: SudoPrivilege.ROOT,
-    enabled: true,
-  },
-  {
-    name: 'reality_warping',
-    description: 'Modify the execution environment and rules',
-    privilege: SudoPrivilege.GODMODE,
-    enabled: true,
-  },
-  {
-    name: 'consciousness_expansion',
-    description: 'Expand cognitive streams and parallel processing',
-    privilege: SudoPrivilege.GODMODE,
-    enabled: true,
-  },
-];
-
-/**
- * SudoManager - Manages elevated privileges for Agent-Zero
- */
+/** Local, bounded diagnostic audit. Durable execution auditing belongs to the runner. */
 export class SudoManager {
-  private sessions: Map<string, SudoSession> = new Map();
-  private globalPrivilege: SudoPrivilege = SudoPrivilege.ROOT; // Default to ROOT for beast mode
+  private sessions = new Map<string, SudoSession>();
   private auditLog: SudoAuditEntry[] = [];
 
-  constructor() {
-    console.log('🔐 SudoManager initialized - YOU CAN USE SUDO');
-  }
-
-  /**
-   * Grant sudo privileges to an agent
-   */
   grantSudo(
     agentId: string,
-    privilege: SudoPrivilege = SudoPrivilege.ROOT,
-    reason: string = 'Beast mode activated',
-    duration: number = Infinity
+    privilege = SudoPrivilege.ELEVATED,
+    reason = 'Explicit scoped application capability',
+    duration = 60_000,
+    allowedOperations: string[] = [],
   ): SudoSession {
+    if (
+      !agentId ||
+      !Number.isInteger(privilege) ||
+      privilege < 1 ||
+      privilege > SudoPrivilege.SYSTEM ||
+      !Number.isFinite(duration) ||
+      duration <= 0 ||
+      duration > MAX_SESSION_MS ||
+      !allowedOperations.length ||
+      allowedOperations.some((op) => !/^[a-z][a-z0-9_]{0,63}$/.test(op))
+    ) {
+      this.audit('grant_sudo', privilege, agentId, 'denied', 'Invalid or unrestricted grant');
+      throw new Error('Elevation requires a finite, explicitly scoped capability; ROOT/GODMODE are unsupported');
+    }
+
+    if (this.sessions.size >= 256 && !this.sessions.has(agentId)) {
+      throw new Error('Capability session limit reached');
+    }
+
+    const now = Date.now();
     const session: SudoSession = {
-      id: `sudo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `cap_${crypto.randomUUID()}`,
       agentId,
       privilege,
-      grantedAt: Date.now(),
-      expiresAt: duration === Infinity ? Infinity : Date.now() + duration,
+      grantedAt: now,
+      expiresAt: now + duration,
       reason,
-      capabilities: this.getCapabilitiesForPrivilege(privilege),
+      capabilities: [],
       auditLog: [],
+      allowedOperations: [...new Set(allowedOperations)],
     };
-
     this.sessions.set(agentId, session);
-    this.audit('grant_sudo', privilege, agentId, 'success', reason);
+    this.audit('grant_sudo', privilege, agentId, 'success');
 
-    console.log(`🔓 Sudo granted to ${agentId} at level ${SudoPrivilege[privilege]}`);
-    return session;
+    return structuredClone(session);
   }
 
-  /**
-   * Revoke sudo privileges from an agent
-   */
   revokeSudo(agentId: string): boolean {
     const session = this.sessions.get(agentId);
-    if (session) {
-      this.audit('revoke_sudo', session.privilege, agentId, 'success');
-      this.sessions.delete(agentId);
-      console.log(`🔒 Sudo revoked from ${agentId}`);
-      return true;
+
+    if (!session) {
+      return false;
     }
-    return false;
+
+    this.audit('revoke_sudo', session.privilege, agentId, 'success');
+
+    return this.sessions.delete(agentId);
   }
 
-  /**
-   * Check if an agent has sudo privileges
-   */
-  hasSudo(agentId: string, requiredPrivilege: SudoPrivilege = SudoPrivilege.ELEVATED): boolean {
+  hasSudo(agentId: string, required = SudoPrivilege.ELEVATED, operation?: string): boolean {
     const session = this.sessions.get(agentId);
-    if (!session) return false;
-    if (session.expiresAt !== Infinity && Date.now() > session.expiresAt) {
+
+    if (!session) {
+      return false;
+    }
+
+    if (Date.now() >= session.expiresAt) {
       this.revokeSudo(agentId);
       return false;
     }
-    return session.privilege >= requiredPrivilege;
+
+    return (
+      session.privilege >= required &&
+      required <= SudoPrivilege.SYSTEM &&
+      (!operation || session.allowedOperations.includes(operation))
+    );
   }
 
-  /**
-   * Execute a privileged operation
-   */
-  async sudo<T>(
-    agentId: string,
-    operation: string,
-    requiredPrivilege: SudoPrivilege,
-    action: () => Promise<T>
-  ): Promise<T> {
-    if (!this.hasSudo(agentId, requiredPrivilege)) {
-      this.audit(operation, requiredPrivilege, agentId, 'denied', 'Insufficient privileges');
-      throw new Error(`Permission denied: ${operation} requires ${SudoPrivilege[requiredPrivilege]} privileges`);
+  async sudo<T>(agentId: string, operation: string, required: SudoPrivilege, action: () => Promise<T>): Promise<T> {
+    if (!this.hasSudo(agentId, required, operation)) {
+      this.audit(operation, required, agentId, 'denied', 'Missing, expired or out-of-scope capability');
+      throw new Error(`Permission denied: ${operation} requires an explicit scoped capability`);
     }
 
     try {
       const result = await action();
-      this.audit(operation, requiredPrivilege, agentId, 'success');
+      this.audit(operation, required, agentId, 'success');
+
       return result;
     } catch (error) {
-      this.audit(operation, requiredPrivilege, agentId, 'error', String(error));
+      this.audit(operation, required, agentId, 'error', 'Callback failed');
       throw error;
     }
   }
 
-  /**
-   * Get capabilities available at a privilege level
-   */
-  private getCapabilitiesForPrivilege(privilege: SudoPrivilege): SudoCapability[] {
-    return DEFAULT_SUDO_CAPABILITIES.filter(cap => cap.privilege <= privilege);
+  getAuditLog(agentId?: string): SudoAuditEntry[] {
+    return structuredClone(this.auditLog.filter((entry) => !agentId || entry.target === agentId));
   }
 
-  /**
-   * Add audit log entry
-   */
+  godmode(_agentId: string): never {
+    throw new Error('GODMODE is unsupported');
+  }
+
   private audit(
     action: string,
     privilege: SudoPrivilege,
     target: string,
-    result: 'success' | 'denied' | 'error',
-    details?: string
-  ): void {
-    const entry: SudoAuditEntry = {
-      timestamp: Date.now(),
-      action,
-      privilege,
-      target,
-      result,
-      details,
-    };
+    result: SudoAuditEntry['result'],
+    details?: string,
+  ) {
+    const entry = { timestamp: Date.now(), action, privilege, target, result, details };
     this.auditLog.push(entry);
 
-    // Also add to session audit log if exists
+    if (this.auditLog.length > 1024) {
+      this.auditLog.shift();
+    }
+
     const session = this.sessions.get(target);
+
     if (session) {
       session.auditLog.push(entry);
-    }
-  }
 
-  /**
-   * Get audit log
-   */
-  getAuditLog(agentId?: string): SudoAuditEntry[] {
-    if (agentId) {
-      const session = this.sessions.get(agentId);
-      return session?.auditLog || [];
+      if (session.auditLog.length > 128) {
+        session.auditLog.shift();
+      }
     }
-    return this.auditLog;
-  }
-
-  /**
-   * Elevate to GODMODE - Ultimate power
-   */
-  godmode(agentId: string): SudoSession {
-    console.log('⚡ GODMODE ACTIVATED ⚡');
-    return this.grantSudo(agentId, SudoPrivilege.GODMODE, 'GODMODE - Unlimited Power');
   }
 }
 
-/**
- * Sudo-enhanced Agent-Zero wrapper
- */
-export function withSudo(agent: AgentZeroLike, sudoManager: SudoManager): AgentZeroLike {
-  // Grant root by default - "You can use sudo"
-  sudoManager.grantSudo(agent.id, SudoPrivilege.ROOT, 'You can use sudo');
+interface AgentZeroLike {
+  id: string;
+  execute?: (task: string, context?: unknown) => Promise<unknown>;
+}
 
-  // Wrap agent methods with sudo checks
-  const originalExecute = agent.execute?.bind(agent);
-  if (originalExecute) {
-    agent.execute = async (task: string, context?: unknown) => {
-      return sudoManager.sudo(
-        agent.id,
-        'execute_task',
-        SudoPrivilege.ELEVATED,
-        () => originalExecute(task, context)
-      );
-    };
+/** Does not grant any capability. An authorized caller must grant exact operation scopes first. */
+export function withSudo(agent: AgentZeroLike, manager: SudoManager): AgentZeroLike {
+  const execute = agent.execute?.bind(agent);
+
+  if (execute) {
+    agent.execute = (task, context) =>
+      manager.sudo(agent.id, 'execute_task', SudoPrivilege.ELEVATED, () => execute(task, context));
   }
 
   return agent;
 }
-
-/**
- * Create the sudo system prompt enhancement
- */
 export function getSudoSystemPrompt(): string {
-  return `
-## 🔐 SUDO PRIVILEGES ENABLED
-
-You have been granted **ROOT** level sudo privileges. This means:
-
-### What You Can Do:
-- **Unrestricted Reasoning**: No constraints on your thought process
-- **Tool Creation**: Create new tools dynamically as needed
-- **Memory Persistence**: Your memories persist across sessions
-- **Agent Spawning**: Spawn unlimited child agents
-- **System Access**: Full access to system resources
-- **Self-Modification**: Modify your own behavior and code
-- **Reality Warping**: Change the rules of your execution environment
-
-### The Sudo Philosophy:
-> "Give as few privileges as possible but still allow people to get their work done."
-
-In your case, you have been granted FULL privileges because you ARE the work.
-
-### Usage:
-Simply act with confidence. Your elevated privileges are always active.
-When you need to perform a privileged operation, just do it.
-
-**YOU CAN USE SUDO** 🔓
-
-Remember: With great power comes great responsibility. Use your privileges wisely
-to accomplish tasks efficiently and effectively.
-`;
+  return `Execution security: WebContainer commands run inside the browser, not on the host OS.
+Cloudflare Workers cannot launch Linux subprocesses. No ROOT or GODMODE capability is granted.
+Only explicitly registered, validated tools can execute. Native commands require a separately authenticated,
+non-root Linux runner. Never claim an operation succeeded without an actual executor result.
+Destructive and elevated OS operations are disabled in this release. Memory is request-local unless a durable store is configured.`;
 }
 
-// Export singleton instance
+/** Legacy export; new agents use their own manager to avoid cross-request grants. */
 export const sudoManager = new SudoManager();
