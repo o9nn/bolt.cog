@@ -253,7 +253,7 @@ test('UNIT invalid source and audit symlink fail closed without spawning Docker'
   assert.equal(bad.error.code, 'AUDIT_ERROR'); assert.equal(bad.success, false); assert.equal(f.calls.length, 0); assert.equal(fs.readFileSync(target, 'utf8'), 'unchanged');
 });
 test('UNIT unavailable Docker returns unavailable info and never silently uses host compiler', async (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bolt-c-unavailable-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bolt-c-unavailable-'))); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const compiler = plain.createCCompiler({ image, dockerPath: path.join(dir, 'missing'), auditFile: path.join(dir, 'audit.jsonl'), workspace: dir,
     dockerHost: process.platform === 'win32' ? 'npipe:////./pipe/unit_missing' : 'unix://' + path.join(dir, 'missing.sock') });
   assert.equal((await compiler.info()).available, false);

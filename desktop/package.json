@@ -1,7 +1,7 @@
 {
   "name": "bolt-cog-desktop",
   "productName": "Bolt Cog C",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "C17-only coding edition with real model generation and isolated Docker compile/run",
   "author": "o9nn",
   "license": "MIT",
