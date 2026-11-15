@@ -361,7 +361,13 @@ jobs:
           const sums = [];
           for (const [target, extensions] of Object.entries(groups)) {
             const prefix = `BoltCog-C-${version}-${target}`;
-            const expected = extensions.map(ext => `${prefix}${target.startsWith('win-') ? '-' : '.'}${ext}`);
+            const expected = extensions.map(ext => {
+              if (target === 'linux-x64') {
+                const arch = ext === 'AppImage' ? 'x86_64' : 'amd64';
+                return `BoltCog-C-${version}-linux-${arch}.${ext}`;
+              }
+              return `${prefix}${target.startsWith('win-') ? '-' : '.'}${ext}`;
+            });
             const dir = path.join('downloaded', prefix);
             const files = fs.readdirSync(dir, { withFileTypes: true });
             assert.equal(files.length, expected.length, `${target}: unexpected or missing installer files`);
