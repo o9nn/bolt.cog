@@ -8,7 +8,7 @@ const { isTrustedNavigation } = require('./policy.cjs');
 module.exports = function runSmoke(window, config, offlinePath) {
   let started = false;
   const fail = (error) => { console.error('ELECTRON_SMOKE_FAILED', error?.message || 'unknown'); app.exit(1); };
-  const watchdog = setTimeout(() => fail(new Error('Smoke deadline exceeded')), process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1' ? 330_000 : 100_000);
+  const watchdog = setTimeout(() => fail(new Error('Smoke deadline exceeded')), process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1' || process.env.BOLT_DESKTOP_SMOKE_DISPLAY === '1' ? 330_000 : 100_000);
   const remoteAppRequests = [];
   const browserErrors = [];
   window.webContents.session.webRequest.onErrorOccurred((details) => {
@@ -47,6 +47,8 @@ module.exports = function runSmoke(window, config, offlinePath) {
       }
       let chat;
       let terminal;
+      let terminalDisplay;
+      if (process.env.BOLT_DESKTOP_SMOKE_DISPLAY === '1') terminalDisplay = await require('./terminal-display-smoke.cjs')(window, process.env.BOLT_DESKTOP_SMOKE_OUTPUT);
       if (process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1') terminal = await require('./terminal-smoke.cjs')(window, process.env.BOLT_DESKTOP_SMOKE_OUTPUT);
       if (process.env.BOLT_DESKTOP_SMOKE_CHAT === '1') {
         const payload = { messages: [{ role: 'user', content: 'Write a Python function sum_even(numbers) that returns the sum of even integers. Return only the function code, no XML or prose.' }] };
@@ -80,6 +82,7 @@ module.exports = function runSmoke(window, config, offlinePath) {
         loadedOrigin: new URL(url).origin, crossOriginIsolated: isolation.crossOriginIsolated,
         webcontainer,
         terminal: terminal ? { passed: terminal.passed, cases: terminal.cases.map((test) => test.name) } : undefined,
+        terminalDisplay: terminalDisplay ? { passed: terminalDisplay.passed, rawPreserved: terminalDisplay.rawPreserved } : undefined,
         provider: info.provider, providerConfigured: info.providerConfigured, realChatStream: Boolean(chat),
         cloudflareAppRequests: remoteAppRequests.length, blockedFilePopup: denied, blockedUntrustedNavigation: true, offlinePageVerified: true }));
       app.exit(0);

@@ -1,7 +1,7 @@
 {
   "name": "bolt-cog-desktop",
   "productName": "Bolt Cog Desktop",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Local-first Electron app with bundled Bolt UI, Node chat backend and real configurable inference",
   "author": "o9nn",
   "license": "MIT",
@@ -51,7 +51,8 @@
       "settings.cjs",
       "settings-preload.cjs",
       "settings.html",
-      "settings.js"
+      "settings.js",
+      "terminal-display-smoke.cjs"
     ],
     "artifactName": "BoltCog-Desktop-${version}-${os}-${arch}.${ext}",
     "linux": {

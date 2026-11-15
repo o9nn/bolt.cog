@@ -93,6 +93,10 @@ async function loadApplication() {
   const smokeQuery = new URLSearchParams();
   if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_WEBCONTAINER === '1') smokeQuery.set('desktop-smoke', '1');
   if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1') smokeQuery.set('terminal-smoke', '1');
+  if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_DISPLAY === '1') {
+    smokeQuery.set('terminal-smoke', '1');
+    smokeQuery.set('terminal-display-smoke', '1');
+  }
   try { await mainWindow.loadURL(config.appUrl + (smokeQuery.size ? '?' + smokeQuery.toString() : '')); }
   catch { if (!quitting && !mainWindow.isDestroyed()) await mainWindow.loadFile(offlinePath).catch(() => {}); }
 }
