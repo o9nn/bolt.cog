@@ -6,9 +6,11 @@ const { app, BrowserWindow } = require('electron');
 const { isTrustedNavigation } = require('./policy.cjs');
 
 module.exports = function runSmoke(window, config, offlinePath) {
+  window.show(); window.focus(); // Ensure Viz has a real visible surface under hosted Xvfb.
+
   let started = false;
   const fail = (error) => { console.error('ELECTRON_SMOKE_FAILED', error?.message || 'unknown'); app.exit(1); };
-  const watchdog = setTimeout(() => fail(new Error('Smoke deadline exceeded')), process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1' || process.env.BOLT_DESKTOP_SMOKE_DISPLAY === '1' ? 330_000 : 100_000);
+  const watchdog = setTimeout(() => fail(new Error('Smoke deadline exceeded')), process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1' || process.env.BOLT_DESKTOP_SMOKE_DISPLAY === '1' || process.env.BOLT_C_SMOKE === '1' ? 330_000 : 100_000);
   const remoteAppRequests = [];
   const browserErrors = [];
   window.webContents.session.webRequest.onErrorOccurred((details) => {
@@ -45,6 +47,8 @@ module.exports = function runSmoke(window, config, offlinePath) {
         assert.equal(webcontainer?.boot, true, webcontainer?.error || 'WebContainer did not boot');
         assert.equal(webcontainer.commandExitCode, 0); assert.equal(webcontainer.previewText, 'BOLT_REAL_PREVIEW');
       }
+      let cEdition;
+      if (process.env.BOLT_C_SMOKE === '1') cEdition = await require('./c-smoke.cjs')(window,process.env.BOLT_DESKTOP_SMOKE_OUTPUT);
       let chat;
       let terminal;
       let terminalDisplay;
@@ -80,7 +84,7 @@ module.exports = function runSmoke(window, config, offlinePath) {
         packaged: app.isPackaged, sandbox: prefs.sandbox, nodeIntegration: prefs.nodeIntegration,
         contextIsolation: prefs.contextIsolation, webSecurity: prefs.webSecurity, localLoaded: true,
         loadedOrigin: new URL(url).origin, crossOriginIsolated: isolation.crossOriginIsolated,
-        webcontainer,
+        webcontainer, cEdition,
         terminal: terminal ? { passed: terminal.passed, cases: terminal.cases.map((test) => test.name) } : undefined,
         terminalDisplay: terminalDisplay ? { passed: terminalDisplay.passed, rawPreserved: terminalDisplay.rawPreserved } : undefined,
         provider: info.provider, providerConfigured: info.providerConfigured, realChatStream: Boolean(chat),

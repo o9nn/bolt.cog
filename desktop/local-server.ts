@@ -5,6 +5,7 @@ import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { createLocalToolFactory } from './local-tools';
 import { createDiagnosticRecorder } from './diagnostics';
 import { requiresModernAnthropicTextAdapter } from '../app/lib/.server/llm/anthropic-compat';
+import { createCAPI } from './c-api';
 
 const mime: Record<string, string> = {
   '.js': 'application/javascript',
@@ -48,6 +49,15 @@ export async function startLocalServer({
   const root = await realpath(assetsDir);
   const createTools = createLocalToolFactory(workspace, auditFile);
   const recordDiagnostic = createDiagnosticRecorder(path.join(path.dirname(auditFile), 'chat-diagnostics.jsonl'));
+  const cOnly = env.BOLT_C_ONLY === '1';
+  const cAPI = cOnly
+    ? createCAPI({
+        image: env.BOLT_C_IMAGE || '',
+        dockerPath: env.BOLT_C_DOCKER_PATH || undefined,
+        dockerHost: env.BOLT_C_DOCKER_HOST || undefined,
+        auditFile: path.join(path.dirname(auditFile), 'c-execution.jsonl'),
+      })
+    : undefined;
   let origin = '';
   const server = http.createServer(async (req, res) => {
     const abort = new AbortController();
@@ -76,9 +86,13 @@ export async function startLocalServer({
         return res.end(
           JSON.stringify({
             runtime: 'desktop',
-            nativeTools: 'read-only',
-            nativeToolsSupported: !((env.LLM_PROVIDER || 'anthropic') === 'anthropic' && requiresModernAnthropicTextAdapter(env.LLM_MODEL || env.ANTHROPIC_MODEL || '')),
-            builtInTerminal: 'webcontainer',
+            codingEdition: cOnly ? 'c17' : 'general',
+            nativeTools: cOnly ? 'disabled' : 'read-only',
+            nativeToolsSupported: !cOnly && !(
+              (env.LLM_PROVIDER || 'anthropic') === 'anthropic' &&
+              requiresModernAnthropicTextAdapter(env.LLM_MODEL || env.ANTHROPIC_MODEL || '')
+            ),
+            builtInTerminal: cOnly ? 'c-sandbox' : 'webcontainer',
             workspaceId: 'desktop',
             provider: env.LLM_PROVIDER || 'anthropic',
             model: env.LLM_MODEL || env.ANTHROPIC_MODEL || '',
@@ -88,6 +102,10 @@ export async function startLocalServer({
                 : Boolean(env.ANTHROPIC_API_KEY),
           }),
         );
+      }
+      if (cOnly && req.method === 'GET' && url.pathname === '/') {
+        res.writeHead(302, { ...security, Location: '/c' });
+        return res.end();
       }
       if (req.method === 'GET' || req.method === 'HEAD') {
         let relative: string;
@@ -119,6 +137,9 @@ export async function startLocalServer({
           }
         }
       }
+      if (cOnly && url.pathname !== '/c' && url.pathname !== '/api/chat' && !url.pathname.startsWith('/api/c/')) {
+        return deny(404, 'C edition exposes only its C workspace and reviewed compile/run APIs.');
+      }
       const chunks: Buffer[] = [];
       let bytes = 0;
       for await (const chunk of req) {
@@ -139,10 +160,18 @@ export async function startLocalServer({
         body: ['GET', 'HEAD'].includes(method) ? undefined : Buffer.concat(chunks),
       });
       // Server-owned context only; client input can never select this trust boundary.
-      const response = await handler(request, {
-        cloudflare: { env },
-        desktop: { createTools, workspaceId: 'desktop', recordDiagnostic },
-      });
+      const response =
+        cAPI && url.pathname.startsWith('/api/c/')
+          ? await cAPI.handle(request)
+          : await handler(request, {
+              cloudflare: { env },
+              desktop: {
+                createTools,
+                workspaceId: 'desktop',
+                recordDiagnostic,
+                ...(cOnly ? { codingEdition: 'c17' } : {}),
+              },
+            });
       response.headers.forEach((value, key) => res.setHeader(key, value));
       for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
       res.statusCode = response.status;
@@ -184,10 +213,12 @@ export async function startLocalServer({
   return {
     origin,
     server,
-    close: () =>
-      new Promise<void>((resolve) => {
+    close: async () => {
+      await cAPI?.close();
+      return new Promise<void>((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();
-      }),
+      });
+    },
   };
 }

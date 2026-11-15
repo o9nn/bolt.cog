@@ -1,8 +1,8 @@
 {
   "name": "bolt-cog-desktop",
-  "productName": "Bolt Cog Desktop",
-  "version": "0.2.3",
-  "description": "Local-first Electron app with bundled Bolt UI, Node chat backend and real configurable inference",
+  "productName": "Bolt Cog C",
+  "version": "0.3.3",
+  "description": "C17-only coding edition with real model generation and isolated Docker compile/run",
   "author": "o9nn",
   "license": "MIT",
   "private": true,
@@ -18,7 +18,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "test": "node --test tests/*.cjs tests/provider-probe.cjs",
+    "test": "node --test tests/*.cjs tests/provider-probe.cjs tests/c-api.cjs",
     "smoke": "node scripts/smoke.cjs",
     "check-version": "node scripts/check-version.cjs",
     "pack": "electron-builder --dir --publish never",
@@ -30,8 +30,8 @@
     "electron-builder": "26.18.0"
   },
   "build": {
-    "appId": "org.o9nn.boltcog",
-    "productName": "Bolt Cog Desktop",
+    "appId": "org.o9nn.boltcog.c17",
+    "productName": "Bolt Cog C",
     "executableName": "bolt-cog-desktop",
     "asar": true,
     "npmRebuild": false,
@@ -52,9 +52,11 @@
       "settings-preload.cjs",
       "settings.html",
       "settings.js",
-      "terminal-display-smoke.cjs"
+      "terminal-display-smoke.cjs",
+      "c-edition.json",
+      "c-smoke.cjs"
     ],
-    "artifactName": "BoltCog-Desktop-${version}-${os}-${arch}.${ext}",
+    "artifactName": "BoltCog-C-${version}-${os}-${arch}.${ext}",
     "linux": {
       "target": [
         "AppImage",
@@ -62,7 +64,8 @@
       ],
       "category": "Development",
       "icon": "assets/icon.png",
-      "maintainer": "o9nn"
+      "maintainer": "o9nn",
+      "syncDesktopName": true
     },
     "deb": {
       "depends": [
@@ -87,10 +90,10 @@
       "perMachine": false,
       "allowElevation": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "BoltCog-Desktop-${version}-win-${arch}-setup.${ext}"
+      "artifactName": "BoltCog-C-${version}-win-${arch}-setup.${ext}"
     },
     "portable": {
-      "artifactName": "BoltCog-Desktop-${version}-win-${arch}-portable.${ext}"
+      "artifactName": "BoltCog-C-${version}-win-${arch}-portable.${ext}"
     },
     "mac": {
       "target": [
@@ -114,5 +117,6 @@
       }
     ],
     "beforePack": "./scripts/check-runtime.cjs"
-  }
+  },
+  "desktopName": "Bolt Cog C"
 }

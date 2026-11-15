@@ -7,9 +7,12 @@ const { fileURLToPath } = require('node:url');
 const { PARTITION, localConfig, isTrustedNavigation, isAppURL, isSafeDownload, rendererPreferences, safeFilename } = require('./policy.cjs');
 const { createPreferences } = require('./preferences.cjs');
 const { openSettings } = require('./settings.cjs');
+const cEdition = require('./c-edition.json');
 
 app.enableSandbox();
 const smokeMode = app.commandLine.hasSwitch('desktop-smoke');
+// Xvfb runners lack a usable GPU; this changes rendering only, never sandbox policy.
+if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_SOFTWARE_RENDERING === '1') app.disableHardwareAcceleration();
 if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_PROFILE) app.setPath('userData', process.env.BOLT_DESKTOP_SMOKE_PROFILE);
 const offlinePath = path.join(__dirname, 'offline.html');
 let mainWindow, backend, config, preferences;
@@ -48,6 +51,8 @@ async function startBackend() {
   backend = utilityProcess.fork(path.join(payload, 'backend.cjs'), [], {
     cwd: app.getPath('userData'), stdio: 'ignore', serviceName: 'Bolt local application backend',
     env: { ...baseEnv, ...providerEnv, NODE_ENV: 'production', BOLT_DESKTOP_UTILITY: '1', BOLT_LOCAL_TOKEN: localToken,
+      ...(cEdition.enabled ? { BOLT_C_ONLY: '1', BOLT_C_IMAGE: cEdition.image,
+        BOLT_C_DOCKER_PATH: process.env.BOLT_C_DOCKER_PATH || '', BOLT_C_DOCKER_HOST: process.env.BOLT_C_DOCKER_HOST || '' } : {}),
       BOLT_ASSETS_DIR: path.join(payload, 'client'), BOLT_WORKSPACE: path.join(app.getPath('userData'), 'workspace'),
       BOLT_AUDIT_FILE: path.join(app.getPath('userData'), 'audit', 'native-inspections.jsonl'), BOLT_LOCAL_PORT: String(selectedPort()) },
   });
@@ -70,9 +75,9 @@ async function startBackend() {
 async function stopBackend() {
   const child = backend; backend = undefined;
   if (!child?.pid) return;
-  await new Promise((resolve) => {
-    const timeout = setTimeout(() => { child.kill(); resolve(); }, 3000);
-    child.once('exit', () => { clearTimeout(timeout); resolve(); });
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { child.kill(); if (cEdition.enabled) reject(new Error('C backend cleanup deadline exceeded; shutdown was forced. Inspect owned-container audit before running again.')); else resolve(); }, cEdition.enabled ? 60000 : 3000);
+    child.once('exit', (code) => { clearTimeout(timeout); if(cEdition.enabled && code !== 0) reject(new Error('C backend exited without confirming cleanup. Inspect the owned-container audit.')); else resolve(); });
     child.postMessage({ type: 'shutdown' });
   });
 }
@@ -97,7 +102,7 @@ async function loadApplication() {
     smokeQuery.set('terminal-smoke', '1');
     smokeQuery.set('terminal-display-smoke', '1');
   }
-  try { await mainWindow.loadURL(config.appUrl + (smokeQuery.size ? '?' + smokeQuery.toString() : '')); }
+  try { await mainWindow.loadURL(config.appUrl + (cEdition.enabled ? 'c' : '') + (smokeQuery.size ? '?' + smokeQuery.toString() : '')); }
   catch { if (!quitting && !mainWindow.isDestroyed()) await mainWindow.loadFile(offlinePath).catch(() => {}); }
 }
 function settings() { return openSettings({ parent: mainWindow, preferences, onSaved: restartApplication }); }
@@ -158,7 +163,14 @@ function createWindow() {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
-  app.on('before-quit', () => { quitting = true; if (backend?.pid) backend.kill(); });
+  app.on('before-quit', (event) => {
+    if (quitting) return;
+    quitting = true;
+    if (cEdition.enabled && backend?.pid) {
+      event.preventDefault();
+      void stopBackend().catch(() => { dialog.showErrorBox('C sandbox cleanup not confirmed', 'Shutdown was unsuccessful. Review owned-container audit records before running another job.'); }).finally(() => app.quit());
+    } else if (backend?.pid) backend.kill();
+  });
   app.whenReady().then(async () => {
     preferences = createPreferences({ userData: app.getPath('userData'), safeStorage });
     const clientSession = session.fromPartition(PARTITION);
@@ -166,6 +178,7 @@ else {
     clientSession.setPermissionCheckHandler(() => false);
     clientSession.webRequest.onBeforeSendHeaders((details, callback) => {
       // Secrets stay in main/utility processes. Attach only to the exact current local origin.
+      if (cEdition.enabled && /^https?:/.test(details.url) && config && !isAppURL(details.url, config)) return callback({ cancel: true });
       if (config && isAppURL(details.url, config)) details.requestHeaders['X-Bolt-Desktop-Token'] = localToken;
       else for (const key of Object.keys(details.requestHeaders)) if (key.toLowerCase() === 'x-bolt-desktop-token') delete details.requestHeaders[key];
       callback({ requestHeaders: details.requestHeaders });
