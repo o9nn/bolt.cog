@@ -116,4 +116,10 @@ export function installTerminalDiagnostic() {
       terminal.input(text, true);
     },
   };
+
+  if (new URLSearchParams(window.location.search).get('terminal-display-smoke') === '1') {
+    void import('./desktop-terminal-display-diagnostic').then(({ installTerminalDisplayDiagnostic }) => {
+      installTerminalDisplayDiagnostic();
+    });
+  }
 }
