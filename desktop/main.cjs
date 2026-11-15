@@ -11,6 +11,8 @@ const cEdition = require('./c-edition.json');
 
 app.enableSandbox();
 const smokeMode = app.commandLine.hasSwitch('desktop-smoke');
+// Xvfb runners lack a usable GPU; this changes rendering only, never sandbox policy.
+if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_SOFTWARE_RENDERING === '1') app.disableHardwareAcceleration();
 if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_PROFILE) app.setPath('userData', process.env.BOLT_DESKTOP_SMOKE_PROFILE);
 const offlinePath = path.join(__dirname, 'offline.html');
 let mainWindow, backend, config, preferences;

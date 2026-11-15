@@ -149,6 +149,7 @@ jobs:
           pnpm typecheck
 
       - name: Test desktop security policy
+        timeout-minutes: 5
         run: pnpm --dir desktop test
 
       - name: Require enforcing Linux Docker engine and pull pinned C image
@@ -235,6 +236,7 @@ jobs:
           set -euo pipefail
           directory=linux-unpacked
           if [ "$BUILD_ARCH" = arm64 ]; then directory=linux-arm64-unpacked; fi
+          export BOLT_DESKTOP_SMOKE_SOFTWARE_RENDERING=1
           export BOLT_DESKTOP_SMOKE_BINARY="$PWD/desktop/dist/$directory/bolt-cog-desktop"
           export BOLT_DESKTOP_SMOKE_OUTPUT="$RUNNER_TEMP/c-edition-evidence/ui-smoke"
           test -x "$BOLT_DESKTOP_SMOKE_BINARY"

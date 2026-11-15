@@ -6,6 +6,8 @@ const { app, BrowserWindow } = require('electron');
 const { isTrustedNavigation } = require('./policy.cjs');
 
 module.exports = function runSmoke(window, config, offlinePath) {
+  window.show(); window.focus(); // Ensure Viz has a real visible surface under hosted Xvfb.
+
   let started = false;
   const fail = (error) => { console.error('ELECTRON_SMOKE_FAILED', error?.message || 'unknown'); app.exit(1); };
   const watchdog = setTimeout(() => fail(new Error('Smoke deadline exceeded')), process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1' || process.env.BOLT_DESKTOP_SMOKE_DISPLAY === '1' || process.env.BOLT_C_SMOKE === '1' ? 330_000 : 100_000);

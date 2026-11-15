@@ -1,6 +1,6 @@
 # Bolt Cog C — native builds and draft releases
 
-Bolt Cog C is the **C17-only coding edition**, identified separately from the existing desktop releases. The initial intended version is **0.3.0**, with tag **`c-desktop-v0.3.0`**, display/product name **Bolt Cog C**, and application ID **`org.o9nn.boltcog.c17`**. The package name and executable remain `bolt-cog-desktop` so the existing frozen build dependency pins can be reused. Installer filenames start with `BoltCog-C-<version>-` and include the target OS and architecture.
+Bolt Cog C is the **C17-only coding edition**, identified separately from the existing desktop releases. The initial intended version is **0.3.1**, with tag **`c-desktop-v0.3.1`**, display/product name **Bolt Cog C**, and application ID **`org.o9nn.boltcog.c17`**. The package name and executable remain `bolt-cog-desktop` so the existing frozen build dependency pins can be reused. Installer filenames start with `BoltCog-C-<version>-` and include the target OS and architecture.
 
 The workflow is [.github/workflows/c-edition-release.yml](../.github/workflows/c-edition-release.yml). The existing `electron-release.yml`, its `desktop-v*` namespace, shared version validator, and already published official releases are not repurposed or overwritten by this workflow. A release tag is a maintainer action after validation; adding this workflow does not itself create a tag, run CI or create a release.
 
@@ -97,7 +97,7 @@ Do not manually publish or edit assets while draft assembly runs; release checks
 
 ## Maintainer release gate
 
-Before creating the initial `c-desktop-v0.3.0` tag, validate the complete shared source and intended identity, ensure the real C integration test exists and fails correctly, and review the digest-pinned image provenance. A local syntax/actionlint result only validates workflow structure; it does not establish that hosted native builds or Docker tests ran.
+Before creating the initial `c-desktop-v0.3.1` tag, validate the complete shared source and intended identity, ensure the real C integration test exists and fails correctly, and review the digest-pinned image provenance. A local syntax/actionlint result only validates workflow structure; it does not establish that hosted native builds or Docker tests ran.
 
 After a successful tag run, review all five installers, both Linux C integration logs and source-hash/runtime/denial receipts, packaged UI evidence, and asset-byte readback. Verify an individual download, on a platform with a suitable SHA-256 tool, against `SHA256SUMS`; on Linux:
 

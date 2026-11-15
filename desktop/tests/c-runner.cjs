@@ -42,7 +42,7 @@ function readTar(bytes) {
   return result;
 }
 async function fixture(t, scenario = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bolt-c-unit-'));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bolt-c-unit-')));
   const socket = path.join(dir, 'engine.sock');
   let server;
   if (process.platform !== 'win32') {

@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createCAPI } = require('../runtime/backend.cjs');
 const config = { image: require('../c-edition.json').image, dockerPath: process.platform === 'win32' ? 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe' : '/usr/bin/docker' };
-config.auditFile = require('node:path').join(require('node:os').tmpdir(), 'bolt-c-api-unit-'+process.pid+'.jsonl');
+config.auditFile = require('node:path').join(require('node:fs').realpathSync(require('node:os').tmpdir()), 'bolt-c-api-unit-'+process.pid+'.jsonl');
 const project = { files: { 'main.c': 'int main(void) { return 0; }\n' } };
 function req(route, value) { return new Request('http://127.0.0.1:41000/api/c/'+route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) }); }
 test('run cannot bypass the explicit source review ticket', async () => {
