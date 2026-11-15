@@ -8,6 +8,7 @@ declare module '@remix-run/cloudflare' {
     cloudflare: Cloudflare;
     desktop?: {
       workspaceId: 'desktop';
+      codingEdition?: 'c17';
       createTools(requestId: string, signal: AbortSignal): ReturnType<typeof createAgentZeroTools>;
       recordDiagnostic?(event: import('./desktop/diagnostics').ChatDiagnostic): Promise<void>;
     };

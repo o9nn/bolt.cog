@@ -1,0 +1,33 @@
+'use strict';
+const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
+module.exports=async function cSmoke(window,folder){
+ const wc=window.webContents;
+ const evaluate=(fn,...args)=>wc.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`,true);
+ async function wait(predicate,label,timeout=120000){const start=Date.now();while(Date.now()-start<timeout){if(await evaluate(predicate))return;await new Promise(r=>setTimeout(r,250));}throw new Error('C UI timeout: '+label);}
+ const edit=(label,value)=>evaluate((label,value)=>{const el=document.querySelector('textarea[aria-label="'+label+'"]');if(!el)throw new Error('Missing '+label);Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));},label,value);
+ const click=(name)=>evaluate((name)=>{const el=[...document.querySelectorAll('button')].find(b=>b.textContent===name);if(!el||el.disabled)throw new Error('Missing/disabled '+name);el.click();},name);
+ const capture=async(name)=>{fs.mkdirSync(folder,{recursive:true});fs.writeFileSync(path.join(folder,name+'.png'),(await wc.capturePage()).toPNG());};
+ try{
+  window.show();window.focus();await wait(()=>!!document.querySelector('[data-c-workspace]'),'C workspace hydration');
+  assert.equal(await evaluate(()=>new URL(location.href).pathname),'/c');
+  const info=await evaluate(()=>fetch('/api/c/info').then(r=>r.json()));fs.mkdirSync(folder,{recursive:true});fs.writeFileSync(path.join(folder,'compiler-info.json'),JSON.stringify(info,null,2));assert.equal(info.available,true,info.error?.message||'Compiler isolation prerequisites unavailable');
+  const cases=[];
+  if(process.env.BOLT_C_SMOKE_MODEL==='1'){
+   const prompt='The first output character MUST be < (less-than), NOT a backtick. Do not output Markdown fences. The last characters must be </boltArtifact>. Write exactly one complete C17 project artifact: <boltArtifact id="squares" title="C17 squares"><boltAction type="file" filePath="main.c"> followed by real C source, then </boltAction></boltArtifact>. No Markdown or prose. Implement int sum_squares(const int *values, unsigned n). Main uses {2,5,9}, asserts result == 110 and empty sum == 0, and printf("SUM_SQUARES=%d\\n", result). Include only stdio.h and assert.h. Return 0 on success. Do not include shell actions.';
+   await edit('C coding request',prompt);await click('Generate C project');
+   await wait(()=>document.querySelector('[role="status"]')?.textContent.includes('Generated source passed')||document.querySelector('[role="status"]')?.textContent.includes('rejected:')||document.querySelector('[role="status"]')?.textContent.includes('failed'),'genuine C model response',220000);
+   const notice=await evaluate(()=>document.querySelector('[role="status"]').textContent);const raw=await evaluate(()=>document.querySelector('details pre')?.textContent||'');fs.writeFileSync(path.join(folder,'real-model-response.txt'),raw);assert.match(notice,/Generated source passed/,notice);
+   await click('Review compile & run');await wait(()=>!!document.querySelector('[data-c-review]'),'immutable model source review');
+   const review=await evaluate(()=>document.querySelector('[data-c-review]').innerText);fs.writeFileSync(path.join(folder,'model-source-review.txt'),review);await click('Run this exact source');
+   await wait(()=>document.querySelector('[data-c-receipt]')?.textContent.startsWith('{'),'actual model C compiler receipt',85000);
+   const receipt=await evaluate(()=>JSON.parse(document.querySelector('[data-c-receipt]').textContent));fs.writeFileSync(path.join(folder,'real-model-compiler-receipt.json'),JSON.stringify(receipt,null,2));assert.equal(receipt.success,true,JSON.stringify(receipt));assert.equal(receipt.compile.exitCode,0);assert.equal(receipt.run.exitCode,0);assert.match(receipt.stdout,/SUM_SQUARES=110/);assert.equal(receipt.cleanup.ok,true);cases.push({name:'Genuine model → strict project → explicit review → real compiler → native run',passed:true,sourceHash:receipt.sourceHash});await capture('real-model-c-workspace');
+  }
+  // Separately labelled source fixture: verify compiler failures stay visible and never invent success.
+  await edit('C source editor','class Forbidden {}; int main(void) { return 0; }\n');await click('Review compile & run');await wait(()=>!!document.querySelector('[data-c-review]'),'C++ denial fixture review');await click('Run this exact source');
+  await wait(()=>document.querySelector('[data-c-receipt]')?.textContent.startsWith('{'),'real C++ compiler rejection');const denied=await evaluate(()=>JSON.parse(document.querySelector('[data-c-receipt]').textContent));assert.equal(denied.success,false);assert.equal(denied.status,'compile_failed');assert.equal(denied.run,undefined);fs.writeFileSync(path.join(folder,'cpp-compiler-denial.json'),JSON.stringify(denied,null,2));cases.push({name:'Labelled C++ source rejected by real strict C compiler; no run',passed:true});
+  await edit('C source editor','#include <stdio.h>\nint main(void){puts("C_UI_REAL_RUN");return 0;}\n');await click('Review compile & run');await wait(()=>!!document.querySelector('[data-c-review]'),'edited source review');await edit('C source editor','#include <stdio.h>\nint main(void){puts("C_UI_REAL_RUN_CHANGED");return 0;}\n');assert.equal(await evaluate(()=>!!document.querySelector('[data-c-review]')),false,'Editing must revoke review');cases.push({name:'Editing revokes explicit source confirmation',passed:true});
+  await click('Review compile & run');await wait(()=>!!document.querySelector('[data-c-review]'),'re-review');await click('Run this exact source');await wait(()=>document.querySelector('[data-c-receipt]')?.textContent.startsWith('{'),'edited real program');const final=await evaluate(()=>JSON.parse(document.querySelector('[data-c-receipt]').textContent));assert.equal(final.success,true);assert.match(final.stdout,/C_UI_REAL_RUN_CHANGED/);cases.push({name:'Reviewed edited C source executes with authoritative exit and cleanup',passed:true});await capture('c-workspace-native-result');
+  assert.equal(await evaluate(()=>!!document.querySelector('.xterm')),false,'C edition must not silently use WebContainer');
+  const report={passed:true,inference:process.env.BOLT_C_SMOKE_MODEL==='1',model:process.env.LLM_MODEL,scope:'Actual Electron UI and Docker C adapter',cases};fs.writeFileSync(path.join(folder,'C_SMOKE_RESULT.json'),JSON.stringify(report,null,2));return report;
+ }catch(error){await capture('c-workspace-failure');fs.writeFileSync(path.join(folder,'C_UI_FAILURE.txt'),await evaluate(()=>document.body.innerText));throw error;}
+};

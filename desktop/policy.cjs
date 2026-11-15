@@ -1,6 +1,6 @@
 'use strict';
 
-const PARTITION = 'persist:bolt-cog-desktop';
+const PARTITION = require('./c-edition.json').enabled ? 'persist:bolt-cog-c17' : 'persist:bolt-cog-desktop';
 
 function httpsURL(value) {
   const url = new URL(value);

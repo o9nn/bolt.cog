@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { randomBytes } = require('node:crypto');
 const http = require('node:http');
-const { startBackend, createLocalToolFactory } = require('../runtime/backend.cjs');
+const { startBackend, startLocalServer, createLocalToolFactory } = require('../runtime/backend.cjs');
 
 async function withBackend(run) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bolt-local-backend-'));
@@ -66,4 +66,17 @@ test('real Agent-Zero identity invokes the fixed native utility, audits, and den
     const events = (await fs.readFile(auditFile, 'utf8')).trim().split('\n').map(JSON.parse);
     assert.equal(events.length, 4); assert.equal(events[0].phase, 'authorized'); assert.equal(events[1].success, true); assert.equal(events[3].success, false);
   } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test('C edition requires the local capability and excludes the old shell workspace', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bolt-c-server-'));
+  const token = 'c'.repeat(64);
+  const local = await startLocalServer({token,assetsDir:path.join(__dirname,'../runtime/client'),workspace:directory,auditFile:path.join(directory,'audit','native.jsonl'),env:{BOLT_C_ONLY:'1',BOLT_C_IMAGE:require('../c-edition.json').image},handler:async(request,context)=>new Response(JSON.stringify({edition:context.desktop.codingEdition}))});
+  try {
+    assert.equal((await fetch(local.origin+'/api/c/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
+    assert.equal((await fetch(local.origin+'/chat',{headers:{'X-Bolt-Desktop-Token':token}})).status,404);
+    const info=await(await fetch(local.origin+'/api/desktop/info',{headers:{'X-Bolt-Desktop-Token':token}})).json();
+    assert.equal(info.codingEdition,'c17');assert.equal(info.nativeToolsSupported,false);
+    const chat=await(await fetch(local.origin+'/api/chat',{method:'POST',headers:{'X-Bolt-Desktop-Token':token,'Content-Type':'application/json'},body:'{}'})).json();assert.equal(chat.edition,'c17');
+  }finally{await local.close();}
 });

@@ -7,6 +7,8 @@ import { startLocalServer } from './local-server';
 
 export { startLocalServer } from './local-server';
 export { createLocalToolFactory } from './local-tools';
+export { createCCompiler } from './c-runner';
+export { createCAPI } from './c-api';
 
 export async function startBackend(options: {
   token: string;
@@ -20,7 +22,18 @@ export async function startBackend(options: {
 }
 
 if (process.env.BOLT_DESKTOP_UTILITY === '1') {
-  const allowed = ['ANTHROPIC_API_KEY', 'ANTHROPIC_MODEL', 'LLM_PROVIDER', 'LLM_BASE_URL', 'LLM_MODEL', 'LLM_API_KEY'];
+  const allowed = [
+    'ANTHROPIC_API_KEY',
+    'ANTHROPIC_MODEL',
+    'LLM_PROVIDER',
+    'LLM_BASE_URL',
+    'LLM_MODEL',
+    'LLM_API_KEY',
+    'BOLT_C_ONLY',
+    'BOLT_C_IMAGE',
+    'BOLT_C_DOCKER_PATH',
+    'BOLT_C_DOCKER_HOST',
+  ];
   const env = Object.fromEntries(allowed.filter((key) => process.env[key]).map((key) => [key, process.env[key]!]));
   startBackend({
     token: process.env.BOLT_LOCAL_TOKEN || '',
