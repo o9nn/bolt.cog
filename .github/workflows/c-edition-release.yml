@@ -258,7 +258,11 @@ jobs:
           const files = fs.readdirSync('desktop/dist', { withFileTypes: true }).filter(f => f.isFile());
           const expected = process.env.BUILD_PLATFORM === 'win'
             ? [`${prefix}-setup.exe`, `${prefix}-portable.exe`]
-            : process.env.EXPECTED_EXTENSIONS.split(',').map(ext => `${prefix}.${ext}`);
+            : process.env.EXPECTED_EXTENSIONS.split(',').map(ext => {
+                const arch = process.env.BUILD_PLATFORM === 'linux' && process.env.BUILD_ARCH === 'x64'
+                  ? (ext === 'AppImage' ? 'x86_64' : 'amd64') : process.env.BUILD_ARCH;
+                return `BoltCog-C-${version}-${process.env.BUILD_PLATFORM}-${arch}.${ext}`;
+              });
           for (const name of expected) {
             assert.ok(files.some(f => f.name === name), `Missing installer: ${name}`);
             assert.ok(fs.statSync(path.join('desktop/dist', name)).size > 0, `Empty installer: ${name}`);

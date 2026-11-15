@@ -24,7 +24,7 @@ This multi-architecture digest was resolved from the official `gcc:14-bookworm` 
 The default Docker CLI is `/usr/bin/docker` on Linux, `/usr/local/bin/docker` on macOS, or `C:\Program Files\Docker\Docker\resources\bin\docker.exe` on Windows. Default daemon endpoint is `unix:///var/run/docker.sock` or `npipe:////./pipe/docker_engine`. Trusted native main-process environment overrides `BOLT_C_DOCKER_PATH` and `BOLT_C_DOCKER_HOST` can select a different absolute local CLI/socket; TCP, SSH and remote named pipes are rejected. Example rootless Linux launch:
 
 ```sh
-BOLT_C_DOCKER_HOST=unix:///run/user/1000/docker.sock ./BoltCog-C-0.3.2-linux-x64.AppImage
+BOLT_C_DOCKER_HOST=unix:///run/user/1000/docker.sock ./BoltCog-C-0.3.3-linux-x86_64.AppImage
 ```
 
 Use the actual user UID and socket, not a guessed UID. Docker Desktop may require its actual local Unix socket path or Linux-engine named pipe. The CLI needs access to the selected local engine, but generated programs never receive that socket. The application uses a separate desktop app ID/user-data partition from the general edition. Re-enter inference settings there; secrets are not silently copied from the general edition. Provider keys stay in trusted processes/encrypted preferences, not renderer or container environment.
