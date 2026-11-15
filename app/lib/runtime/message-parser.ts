@@ -132,10 +132,11 @@ export class StreamingMessageParser {
 
               state.currentAction = this.#parseActionTag(input, actionOpenIndex, actionEndIndex);
 
+              const actionId = String(state.actionId++);
               this._options.callbacks?.onActionOpen?.({
                 artifactId: currentArtifact.id,
                 messageId,
-                actionId: String(state.actionId++),
+                actionId,
                 action: state.currentAction as BoltAction,
               });
 
@@ -256,6 +257,18 @@ export class StreamingMessageParser {
       }
 
       (actionAttributes as FileAction).filePath = filePath;
+    } else if (actionType === 'shell') {
+      const background = this.#extractAttribute(actionTag, 'background');
+
+      if (background === 'true') {
+        (actionAttributes as ShellAction).background = true;
+
+        const port = this.#extractAttribute(actionTag, 'port');
+
+        if (port && /^\d{1,5}$/.test(port)) {
+          (actionAttributes as ShellAction).port = Number(port);
+        }
+      }
     } else if (actionType !== 'shell') {
       logger.warn(`Unknown action type '${actionType}'`);
     }

@@ -11,6 +11,8 @@ export interface FileAction extends BaseAction {
 
 export interface ShellAction extends BaseAction {
   type: 'shell';
+  background?: boolean;
+  port?: number;
 }
 
 export type BoltAction = FileAction | ShellAction;

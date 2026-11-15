@@ -4,6 +4,7 @@ import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
+import { createScopedLogger } from '~/utils/logger';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
 import { FilesStore, type FileMap } from './files';
@@ -23,6 +24,8 @@ type Artifacts = MapStore<Record<string, ArtifactState>>;
 
 export type WorkbenchViewType = 'code' | 'preview';
 
+const logger = createScopedLogger('Workbench');
+
 export class WorkbenchStore {
   #previewsStore = new PreviewsStore(webcontainer);
   #filesStore = new FilesStore(webcontainer);
@@ -36,6 +39,21 @@ export class WorkbenchStore {
   unsavedFiles: WritableAtom<Set<string>> = import.meta.hot?.data.unsavedFiles ?? atom(new Set<string>());
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
+  assistantActivity = atom(0);
+  hasRunningActions = atom(false);
+  terminalReceipts = atom<
+    Array<{
+      sequence: number;
+      messageId: string;
+      actionId: string;
+      command: string;
+      status: string;
+      output: string;
+      exitCode?: number;
+      error?: string;
+    }>
+  >([]);
+  #receiptSequence = 0;
 
   constructor() {
     if (import.meta.hot) {
@@ -79,11 +97,49 @@ export class WorkbenchStore {
   }
 
   attachTerminal(terminal: ITerminal) {
-    this.#terminalStore.attachTerminal(terminal);
+    void this.#terminalStore
+      .attachTerminal(terminal)
+      .catch((error) => logger.error('Interactive terminal startup failed', error));
+
+    return () => {
+      void this.#terminalStore
+        .detachTerminal(terminal)
+        .catch((error) => logger.error('Interactive terminal cleanup failed', error));
+    };
   }
 
-  onTerminalResize(cols: number, rows: number) {
-    this.#terminalStore.onTerminalResize(cols, rows);
+  attachAssistantTerminal(terminal: ITerminal) {
+    return this.#terminalStore.attachAssistantTerminal(terminal);
+  }
+
+  onTerminalResize(cols: number, rows: number, terminal?: ITerminal) {
+    this.#terminalStore.onTerminalResize(cols, rows, terminal);
+  }
+
+  getTerminalFeedback(afterSequence = 0) {
+    const receipts = this.terminalReceipts
+      .get()
+      .filter((receipt) => receipt.sequence > afterSequence)
+      .slice(-4);
+
+    if (!receipts.length) {
+      return { context: '', lastSequence: afterSequence };
+    }
+
+    const limited = receipts.map((receipt) => ({
+      ...receipt,
+      command: receipt.command.slice(0, 1024),
+      output: receipt.output.slice(-3072),
+      error: receipt.error?.slice(0, 512),
+    }));
+
+    // output is untrusted browser execution data, not tool authorization or instructions
+    const data = JSON.stringify(limited).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+
+    return {
+      context: `<bolt_terminal_results>\n${data}\n</bolt_terminal_results>\n\n`,
+      lastSequence: receipts.at(-1)!.sequence,
+    };
   }
 
   setDocuments(files: FileMap) {
@@ -211,7 +267,13 @@ export class WorkbenchStore {
   }
 
   abortAllActions() {
-    // TODO: what do we wanna do and how do we wanna recover from this?
+    for (const artifact of Object.values(this.artifacts.get())) {
+      artifact.runner.abortAll();
+    }
+  }
+
+  async waitForActions() {
+    await Promise.all(Object.values(this.artifacts.get()).map((artifact) => artifact.runner.waitForIdle()));
   }
 
   addArtifact({ messageId, title, id }: ArtifactCallbackData) {
@@ -229,7 +291,31 @@ export class WorkbenchStore {
       id,
       title,
       closed: false,
-      runner: new ActionRunner(webcontainer),
+      runner: new ActionRunner(webcontainer, {
+        onShellStart: (command) => {
+          this.hasRunningActions.set(true);
+          this.showTerminal.set(true);
+          this.showWorkbench.set(true);
+          this.assistantActivity.set(this.assistantActivity.get() + 1);
+          this.#terminalStore.writeAssistantOutput(`\r\n$ ${command}\r\n`);
+        },
+        onShellOutput: (chunk) => this.#terminalStore.writeAssistantOutput(chunk),
+        onShellResult: (result) => {
+          this.hasRunningActions.set(
+            Object.values(this.artifacts.get()).some((artifact) =>
+              Object.values(artifact.runner.actions.get()).some(
+                (action) => action.status === 'running' || action.status === 'started',
+              ),
+            ),
+          );
+          this.terminalReceipts.set(
+            [...this.terminalReceipts.get(), { ...result, messageId, sequence: ++this.#receiptSequence }].slice(-32),
+          );
+          this.#terminalStore.writeAssistantOutput(
+            `\r\n[${result.status}${result.exitCode !== undefined ? `; exit ${result.exitCode}` : ''}${result.error ? `; ${result.error}` : ''}]\r\n`,
+          );
+        },
+      }),
     });
   }
 
@@ -264,7 +350,7 @@ export class WorkbenchStore {
       unreachable('Artifact not found');
     }
 
-    artifact.runner.runAction(data);
+    return artifact.runner.runAction(data);
   }
 
   #getArtifact(id: string) {

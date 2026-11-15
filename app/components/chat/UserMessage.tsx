@@ -14,5 +14,8 @@ export function UserMessage({ content }: UserMessageProps) {
 }
 
 function sanitizeUserMessage(content: string) {
-  return content.replace(modificationsRegex, '').trim();
+  return content
+    .replace(modificationsRegex, '')
+    .replace(/<bolt_terminal_results>[\s\S]*?<\/bolt_terminal_results>/g, '')
+    .trim();
 }

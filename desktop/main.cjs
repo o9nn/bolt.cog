@@ -90,16 +90,39 @@ async function restartApplication() {
 }
 async function loadApplication() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  try { await mainWindow.loadURL(config.appUrl + (smokeMode && process.env.BOLT_DESKTOP_SMOKE_WEBCONTAINER === '1' ? '?desktop-smoke=1' : '')); }
+  const smokeQuery = new URLSearchParams();
+  if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_WEBCONTAINER === '1') smokeQuery.set('desktop-smoke', '1');
+  if (smokeMode && process.env.BOLT_DESKTOP_SMOKE_TERMINAL === '1') smokeQuery.set('terminal-smoke', '1');
+  try { await mainWindow.loadURL(config.appUrl + (smokeQuery.size ? '?' + smokeQuery.toString() : '')); }
   catch { if (!quitting && !mainWindow.isDestroyed()) await mainWindow.loadFile(offlinePath).catch(() => {}); }
 }
 function settings() { return openSettings({ parent: mainWindow, preferences, onSaved: restartApplication }); }
+let probing = false;
+async function testProvider() {
+  if (probing) return;
+  const approval = await dialog.showMessageBox(mainWindow, { type: 'question', buttons: ['Cancel', 'Run test'], defaultId: 0, cancelId: 0,
+    message: 'Test the selected inference provider?', detail: 'This sends one real short prompt using your saved provider, key and model. It may consume a small amount of API credit. No key, prompt or generated response is written to the diagnostic log.' });
+  if (approval.response !== 1) return;
+  probing = true;
+  try {
+    const { probeProvider } = require(path.join(payload, 'probe.cjs'));
+    const result = await probeProvider(preferences.providerEnv(process.env), path.join(app.getPath('userData'), 'audit', 'chat-diagnostics.jsonl'));
+    await dialog.showMessageBox(mainWindow, { type: result.ok ? 'info' : 'error', message: result.ok ? 'Provider test passed' : 'Provider test failed', detail: result.message });
+  } catch {
+    await dialog.showMessageBox(mainWindow, { type: 'error', message: 'Provider test could not run', detail: 'Check saved provider configuration and the installed diagnostic runtime. No successful inference was claimed.' });
+  } finally { probing = false; }
+}
 function buildMenu() {
   const template = [];
   if (process.platform === 'darwin') template.push({ role: 'appMenu' });
   template.push(
     { label: 'File', submenu: [
       { label: 'Inference settings…', accelerator: 'CmdOrCtrl+,', click: settings },
+      { label: 'Test provider connection…', click: () => testProvider().catch(() => {}) },
+      { label: 'Open diagnostics folder', click: () => {
+        const directory = path.join(app.getPath('userData'), 'audit');
+        try { fs.mkdirSync(directory, { recursive: true, mode: 0o700 }); void shell.openPath(directory); } catch { /* No arbitrary client-selected path. */ }
+      } },
       { label: 'Restart local backend', accelerator: 'CmdOrCtrl+Shift+R', click: () => restartApplication().catch(() => {}) },
       { label: 'Open official releases', click: () => shell.openExternal('https://github.com/o9nn/bolt.cog/releases').catch(() => {}) },
       { type: 'separator' },

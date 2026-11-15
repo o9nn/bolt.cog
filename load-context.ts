@@ -9,6 +9,7 @@ declare module '@remix-run/cloudflare' {
     desktop?: {
       workspaceId: 'desktop';
       createTools(requestId: string, signal: AbortSignal): ReturnType<typeof createAgentZeroTools>;
+      recordDiagnostic?(event: import('./desktop/diagnostics').ChatDiagnostic): Promise<void>;
     };
   }
 }

@@ -19,6 +19,9 @@ const { build } = require('../../node_modules/esbuild');
     platform: 'node', target: 'node22', format: 'cjs', bundle: true, sourcemap: false,
     alias: { 'react-dom/server': 'react-dom/server.browser' },
     define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'info' });
+  await build({ entryPoints: [path.join(root, 'desktop/provider-probe.ts')], outfile: path.join(runtime, 'probe.cjs'),
+    platform: 'node', target: 'node22', format: 'cjs', bundle: true, sourcemap: false,
+    define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'info' });
   fs.writeFileSync(path.join(runtime, 'manifest.json'), JSON.stringify({ runtime: 'node-local',
     app: require('../package.json').version, sourceDigest: require('./runtime-manifest.cjs').sourceDigest(root), builtAt: new Date().toISOString(), inferenceBundled: false }, null, 2) + '\n');
   if (!fs.existsSync(path.join(runtime, 'client/assets'))) throw new Error('Missing application assets');

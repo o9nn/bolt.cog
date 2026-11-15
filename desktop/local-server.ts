@@ -3,6 +3,8 @@ import path from 'node:path';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { createLocalToolFactory } from './local-tools';
+import { createDiagnosticRecorder } from './diagnostics';
+import { requiresModernAnthropicTextAdapter } from '../app/lib/.server/llm/anthropic-compat';
 
 const mime: Record<string, string> = {
   '.js': 'application/javascript',
@@ -45,6 +47,7 @@ export async function startLocalServer({
   if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('Invalid local capability');
   const root = await realpath(assetsDir);
   const createTools = createLocalToolFactory(workspace, auditFile);
+  const recordDiagnostic = createDiagnosticRecorder(path.join(path.dirname(auditFile), 'chat-diagnostics.jsonl'));
   let origin = '';
   const server = http.createServer(async (req, res) => {
     const abort = new AbortController();
@@ -74,6 +77,8 @@ export async function startLocalServer({
           JSON.stringify({
             runtime: 'desktop',
             nativeTools: 'read-only',
+            nativeToolsSupported: !((env.LLM_PROVIDER || 'anthropic') === 'anthropic' && requiresModernAnthropicTextAdapter(env.LLM_MODEL || env.ANTHROPIC_MODEL || '')),
+            builtInTerminal: 'webcontainer',
             workspaceId: 'desktop',
             provider: env.LLM_PROVIDER || 'anthropic',
             model: env.LLM_MODEL || env.ANTHROPIC_MODEL || '',
@@ -136,7 +141,7 @@ export async function startLocalServer({
       // Server-owned context only; client input can never select this trust boundary.
       const response = await handler(request, {
         cloudflare: { env },
-        desktop: { createTools, workspaceId: 'desktop' },
+        desktop: { createTools, workspaceId: 'desktop', recordDiagnostic },
       });
       response.headers.forEach((value, key) => res.setHeader(key, value));
       for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
