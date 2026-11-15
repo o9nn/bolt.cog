@@ -425,7 +425,15 @@ jobs:
               exit 1
               ;;
           esac
-          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > release-before-upload.json
+          gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" > release-catalog-after.json
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const release = JSON.parse(fs.readFileSync('release-catalog-after.json', 'utf8')).flat().find(r => r.tag_name === process.env.RELEASE_TAG);
+          assert.ok(release, 'Exact draft release must exist');
+          assert.equal(release.draft, true, 'Never modify a published release');
+          fs.writeFileSync('release-before-upload.json', JSON.stringify(release));
+          NODE
           node <<'NODE'
           const assert = require('node:assert/strict');
           const crypto = require('node:crypto');
@@ -482,7 +490,8 @@ jobs:
             console.log(`${name}: asset ${asset.id}; sha256 ${sha256}`);
           }
           NODE
-          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > release-readback.json
+          release_id="$(node -p "require('./release-before-upload.json').id")"
+          gh api "repos/$GH_REPO/releases/$release_id" > release-readback.json
           node <<'NODE'
           const assert = require('node:assert/strict');
           const fs = require('node:fs');
